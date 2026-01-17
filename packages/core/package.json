@@ -1,0 +1,28 @@
+{
+  "name": "@open-documents/core",
+  "version": "0.0.0",
+  "description": "Read, render and change PDF files in the browser and in Node.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "imports": {
+    "#platform": {
+      "node": "./src/platform/node.js",
+      "default": "./src/platform/browser.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.0.0"
+  },
+  "dependencies": {
+    "@embedpdf/pdfium": "2.2.0"
+  }
+}
