@@ -1,0 +1,23 @@
+{
+  "name": "@open-documents/cli",
+  "version": "0.0.0",
+  "description": "opendocs: inspect, render and change PDF files from the command line.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "opendocs": "./bin/opendocs.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.0.0"
+  },
+  "dependencies": {
+    "@open-documents/core": "0.0.0"
+  }
+}
