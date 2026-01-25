@@ -10,7 +10,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "node --test \"packages/*/test/**/*.test.js\""
+    "test": "node --test \"packages/*/test/**/*.test.js\" \"tools/test/*.test.js\"",
+    "licences": "node tools/check-licences.js"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
