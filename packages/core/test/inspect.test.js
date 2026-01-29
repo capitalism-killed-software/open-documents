@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument } from '@open-documents/fixtures';
+import { textDocument, formDocument } from '@open-documents/fixtures';
 import { inspect, configure, OpenDocumentsError } from '../src/index.js';
 
 test('pages, sizes and rotation', async () => {
@@ -31,6 +31,38 @@ test('metadata and document facts', async () => {
   assert.equal(info.signatures, 0);
   assert.equal(info.attachments, 0);
   assert.equal(info.bookmarks, 0);
+});
+
+test('encrypted files need the password', async () => {
+  const { bytes } = await textDocument({
+    pages: 2,
+    encrypt: { userPassword: 'open', permissions: { printing: true, copying: false } },
+  });
+  await assert.rejects(inspect(bytes), { code: 'PASSWORD_REQUIRED' });
+  await assert.rejects(inspect(bytes, { password: 'wrong' }), { code: 'PASSWORD_REQUIRED' });
+  const info = await inspect(bytes, { password: 'open' });
+  assert.equal(info.pageCount, 2);
+  assert.equal(info.encrypted, true);
+  assert.notEqual(info.permissions, -1);
+  assert.equal(info.permissions & 0b10000, 0, 'copying is not allowed');
+  assert.notEqual(info.permissions & 0b100, 0, 'printing is allowed');
+});
+
+test('forms, bookmarks and attachments are counted', async () => {
+  const form = await formDocument();
+  assert.equal((await inspect(form.bytes)).forms, 'acroform');
+  const { bytes } = await textDocument({
+    pages: 3,
+    bookmarks: [
+      { title: 'Start', page: 1 },
+      { title: 'Middle', page: 2 },
+      { title: 'End', page: 3 },
+    ],
+    attachments: [{ name: 'notes.txt', data: new TextEncoder().encode('hello') }],
+  });
+  const info = await inspect(bytes);
+  assert.equal(info.bookmarks, 3);
+  assert.equal(info.attachments, 1);
 });
 
 test('accepts ArrayBuffer and Blob as well as bytes', async () => {

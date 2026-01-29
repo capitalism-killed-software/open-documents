@@ -72,3 +72,10 @@ test('boxes follow the page rotation', async () => {
     assert.ok(w.y >= 0 && w.y + w.height <= turned.height);
   }
 });
+
+test('encrypted files give up their text with the password', async () => {
+  const locked = await textDocument({ pages: 1, encrypt: { userPassword: 'open' } });
+  await assert.rejects(extractText(locked.bytes), { code: 'PASSWORD_REQUIRED' });
+  const [page] = await extractText(locked.bytes, { password: 'open' });
+  assert.equal(page.text, locked.truth.pages[0].lines.join('\n'));
+});
