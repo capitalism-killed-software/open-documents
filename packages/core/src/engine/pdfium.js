@@ -98,6 +98,82 @@ export class Engine {
   }
 
   /**
+   * Open several documents at once, for operations that copy between them.
+   *
+   * @template T
+   * @param {{ bytes: Uint8Array, password?: string }[]} items
+   * @param {(docs: number[]) => T} use  must be synchronous
+   * @returns {T}
+   */
+  withDocuments(items, use) {
+    /** @type {(i: number, docs: number[]) => T} */
+    const open = (i, docs) =>
+      i === items.length
+        ? use(docs)
+        : this.withDocument(items[i].bytes, items[i], (doc) => open(i + 1, [...docs, doc]));
+    return open(0, []);
+  }
+
+  /**
+   * @template T
+   * @param {(doc: number) => T} use  must be synchronous
+   * @returns {T}
+   */
+  withNewDocument(use) {
+    const doc = this.fn.FPDF_CreateNewDocument();
+    if (!doc) throw new OpenDocumentsError('ENGINE_ERROR', 'Could not create a document.');
+    try {
+      return use(doc);
+    } finally {
+      this.fn.FPDF_CloseDocument(doc);
+    }
+  }
+
+  /**
+   * Copy pages from one document into another.
+   *
+   * @param {number} dest
+   * @param {number} src
+   * @param {number[]} indices  0-based, in the order wanted; repeats allowed
+   * @param {number} at  0-based position in dest
+   */
+  importPages(dest, src, indices, at) {
+    if (!indices.length) return;
+    const ptr = this.malloc(indices.length * 4);
+    try {
+      indices.forEach((n, i) => this.wasm.setValue(ptr + i * 4, n, 'i32'));
+      if (!this.fn.FPDF_ImportPagesByIndex(dest, src, ptr, indices.length, at)) {
+        throw new OpenDocumentsError('ENGINE_ERROR', 'Pages could not be copied.');
+      }
+    } finally {
+      this.free(ptr);
+    }
+  }
+
+  /**
+   * The visible area of a page in its own (unrotated) coordinates: the crop box, or the media
+   * box when there is no crop box.
+   *
+   * @param {number} page
+   * @returns {[number, number, number, number]} left, bottom, right, top
+   */
+  visibleBox(page) {
+    const ptr = this.malloc(16);
+    try {
+      const at = [ptr, ptr + 4, ptr + 8, ptr + 12];
+      const ok = this.fn.FPDFPage_GetCropBox(page, ...at) || this.fn.FPDFPage_GetMediaBox(page, ...at);
+      if (!ok) {
+        // neither box is set: PDFium falls back to US Letter, and so do we
+        return [0, 0, 612, 792];
+      }
+      const [l, b, r, t] = at.map((p) => this.wasm.getValue(p, 'float'));
+      return [Math.min(l, r), Math.min(b, t), Math.max(l, r), Math.max(b, t)];
+    } finally {
+      this.free(ptr);
+    }
+  }
+
+  /**
    * @template T
    * @param {number} doc
    * @param {number} index  0-based

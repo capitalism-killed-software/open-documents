@@ -20,6 +20,7 @@
     "node": ">=24"
   },
   "devDependencies": {
+    "@cantoo/pdf-lib": "2.5.3",
     "@open-documents/fixtures": "0.0.0"
   },
   "dependencies": {
