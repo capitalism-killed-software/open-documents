@@ -8,3 +8,4 @@ export { rotate } from './pages/rotate.js';
 export { extractPages, removePages, reorder } from './pages/extract.js';
 export { merge } from './pages/merge.js';
 export { split } from './pages/split.js';
+export { slicePages } from './pages/slice.js';
