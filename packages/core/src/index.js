@@ -9,3 +9,4 @@ export { extractPages, removePages, reorder } from './pages/extract.js';
 export { merge } from './pages/merge.js';
 export { split } from './pages/split.js';
 export { slicePages } from './pages/slice.js';
+export { crop } from './pages/crop.js';

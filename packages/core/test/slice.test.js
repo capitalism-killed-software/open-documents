@@ -2,31 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { textDocument } from '@open-documents/fixtures';
 import { slicePages, renderPage, inspect } from '../src/index.js';
-
-/**
- * Lines spread over the page so every piece has something on it.
- * @param {number} n
- */
-const lines = (n) => Array.from({ length: 40 }, (_, i) => `Page ${n} line ${i + 1} `.repeat(4));
-
-/**
- * The share of pixels that differ noticeably between a piece and the same area of the whole.
- * @param {{ data: Uint8Array, width: number }} whole
- * @param {{ data: Uint8Array, width: number, height: number }} piece
- * @param {number} left
- * @param {number} top
- */
-function difference(whole, piece, left, top) {
-  let differ = 0;
-  for (let y = 0; y < piece.height; y++) {
-    for (let x = 0; x < piece.width; x++) {
-      const a = ((top + y) * whole.width + left + x) * 4;
-      const b = (y * piece.width + x) * 4;
-      if (Math.abs(whole.data[a] - piece.data[b]) > 40) differ++;
-    }
-  }
-  return differ / (piece.width * piece.height);
-}
+import { difference, busyLines as lines } from './helpers/pixels.js';
 
 for (const rotation of [0, 90, 180, 270]) {
   test(`pieces match the same area of the whole page, turned ${rotation}`, async () => {
