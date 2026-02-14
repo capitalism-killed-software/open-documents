@@ -11,3 +11,4 @@ export { split } from './pages/split.js';
 export { slicePages } from './pages/slice.js';
 export { crop } from './pages/crop.js';
 export { nUp } from './pages/nup.js';
+export { insertBlankPages } from './pages/blank.js';
