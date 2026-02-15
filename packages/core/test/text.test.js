@@ -19,6 +19,7 @@ test('only the pages asked for, in the order asked', async () => {
   assert.deepEqual(pages.map((p) => p.page), [3, 1]);
   await assert.rejects(extractText(doc.bytes, { pages: [4] }), { code: 'PAGE_NOT_FOUND' });
   await assert.rejects(extractText(doc.bytes, { pages: /** @type {any} */ (2) }), { code: 'INVALID_OPTION' });
+  assert.deepEqual((await extractText(doc.bytes, { pages: '2-last' })).map((p) => p.page), [2, 3]);
 });
 
 test('an empty page has no text and no words', async () => {

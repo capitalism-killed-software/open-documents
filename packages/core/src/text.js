@@ -1,7 +1,6 @@
 import { engine } from './engine/pdfium.js';
 import { toPdfBytes } from './input.js';
-import { pageNumber } from './options.js';
-import { fail } from './errors.js';
+import { selectPages } from './modify.js';
 
 /**
  * @typedef {object} PageText
@@ -33,7 +32,7 @@ import { fail } from './errors.js';
  * The text of each page, in the order the PDF stores it.
  *
  * @param {import('./input.js').DocumentInput} input
- * @param {{ pages?: number[], password?: string }} [options]
+ * @param {{ pages?: import('./modify.js').PageSelection, password?: string }} [options]
  * @returns {Promise<PageText[]>}
  */
 export async function extractText(input, options = {}) {
@@ -53,7 +52,7 @@ export async function extractText(input, options = {}) {
  * Every word on the given pages, with its box.
  *
  * @param {import('./input.js').DocumentInput} input
- * @param {{ pages?: number[], password?: string }} [options]
+ * @param {{ pages?: import('./modify.js').PageSelection, password?: string }} [options]
  * @returns {Promise<PageWords[]>}
  */
 export async function extractWords(input, options = {}) {
@@ -73,16 +72,6 @@ export async function extractWords(input, options = {}) {
       }),
     ),
   );
-}
-
-/**
- * @param {number[] | undefined} pages
- * @param {number} pageCount
- */
-function selectPages(pages, pageCount) {
-  if (pages === undefined) return Array.from({ length: pageCount }, (_, i) => i + 1);
-  if (!Array.isArray(pages)) fail('INVALID_OPTION', 'pages must be an array of page numbers.');
-  return pages.map((n) => pageNumber(n, 'pages', pageCount));
 }
 
 /**
