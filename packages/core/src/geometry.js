@@ -36,21 +36,30 @@ export function shownSize(box, quarterTurns) {
  * @returns {Box}
  */
 export function shownRectToBox(box, quarterTurns, rect) {
-  const [x0, y0, x1, y1] = box;
-  /** @type {(u: number, v: number) => [number, number]} */
-  const toPage = (u, v) => {
-    switch (((quarterTurns % 4) + 4) % 4) {
-      case 0:
-        return [x0 + u, y1 - v];
-      case 1:
-        return [x0 + v, y0 + u];
-      case 2:
-        return [x1 - u, y0 + v];
-      default:
-        return [x1 - v, y1 - u];
-    }
-  };
-  const [ax, ay] = toPage(rect.x, rect.y);
-  const [bx, by] = toPage(rect.x + rect.width, rect.y + rect.height);
+  const [ax, ay] = shownPointToPage(box, quarterTurns, rect.x, rect.y);
+  const [bx, by] = shownPointToPage(box, quarterTurns, rect.x + rect.width, rect.y + rect.height);
   return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
+}
+
+/**
+ * A point as shown, in the page's own coordinates.
+ *
+ * @param {Box} box
+ * @param {number} quarterTurns
+ * @param {number} u  from the left edge as shown
+ * @param {number} v  from the top edge as shown
+ * @returns {[number, number]}
+ */
+export function shownPointToPage(box, quarterTurns, u, v) {
+  const [x0, y0, x1, y1] = box;
+  switch (((quarterTurns % 4) + 4) % 4) {
+    case 0:
+      return [x0 + u, y1 - v];
+    case 1:
+      return [x0 + v, y0 + u];
+    case 2:
+      return [x1 - u, y0 + v];
+    default:
+      return [x1 - v, y1 - u];
+  }
 }
