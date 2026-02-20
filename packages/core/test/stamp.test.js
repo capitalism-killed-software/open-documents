@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { textDocument } from '@open-documents/fixtures';
-import { addText, watermark, extractText, extractWords, renderPage, inspect } from '../src/index.js';
+import { addText, watermark, pageNumbers, headerFooter, bates, extractText, extractWords, renderPage, inspect } from '../src/index.js';
 
 const doc = await textDocument({ pages: 3, rotation: [0, 90, 0] });
 
@@ -61,6 +61,47 @@ test('watermark crosses the middle of every page, faint and slanted', async () =
   assert.ok(reddish.length > 10, 'pale red pixels where the watermark crosses the middle');
 });
 
+test('page numbers count the selected pages', async () => {
+  const out = await pageNumbers(doc.bytes, { format: 'Page {n} of {total}', pages: '2-3', start: 1 });
+  const words = await extractWords(out);
+  assert.equal(words[0].words.some((w) => w.text === 'Page' && w.y > 700), false, 'the first page is not numbered');
+  for (const [n, label] of [[2, '1'], [3, '2']]) {
+    const page = words[n - 1];
+    const i = page.words.findIndex((w, k) => w.text === 'Page' && page.words[k + 1]?.text === label && page.words[k + 3]?.text === '2');
+    assert.ok(i >= 0, `page ${n} says Page ${label} of 2`);
+    assert.ok(page.words[i].y > page.height - 60, 'near the bottom');
+  }
+});
+
+test('plain numbers, bottom centre, on a turned page too', async () => {
+  const out = await pageNumbers(doc.bytes, { format: '[{n}]' });
+  const { word, page } = await wordOn(out, 2, '[2]');
+  assert.ok(Math.abs(word.x + word.width / 2 - page.width / 2) < 3);
+  assert.ok(word.y > page.height - 45 && word.y < page.height - 28);
+});
+
+test('headers and footers fill their slots', async () => {
+  const out = await headerFooter(doc.bytes, {
+    header: { left: 'Contract', right: '{title}' },
+    footer: { center: '{n} / {total}' },
+    title: 'Draft-2',
+  });
+  const [first] = await extractWords(out, { pages: [1] });
+  const contract = first.words.find((w) => w.text === 'Contract');
+  const title = first.words.find((w) => w.text === 'Draft-2');
+  assert.ok(contract && title && contract.x < 60 && title.x > 500 && contract.y < 40 && title.y < 40);
+  const pageLine = first.words.filter((w) => w.y > 740).map((w) => w.text).join(' ');
+  assert.equal(pageLine, '1 / 3');
+});
+
+test('bates numbers run on with a prefix', async () => {
+  const out = await bates(doc.bytes, { prefix: 'ACME-', start: 41, digits: 5 });
+  for (const [n, label] of [[1, 'ACME-00041'], [2, 'ACME-00042'], [3, 'ACME-00043']]) {
+    const { word, page } = await wordOn(out, n, label);
+    assert.ok(word.x > page.width / 2 && word.y > page.height - 50, `${label} at the bottom right`);
+  }
+});
+
 test('stamping keeps encryption', async () => {
   const locked = await textDocument({ pages: 1, encrypt: { userPassword: 'open' } });
   const out = await watermark(locked.bytes, { text: 'COPY', password: 'open' });
@@ -100,6 +141,11 @@ test('bad options are refused', async () => {
     () => addText(doc.bytes, /** @type {any} */ ({ text: 5 })),
     () => addText(doc.bytes, /** @type {any} */ (undefined)),
     () => watermark(doc.bytes, /** @type {any} */ (undefined)),
+    () => pageNumbers(doc.bytes, { start: -1 }),
+    () => pageNumbers(doc.bytes, { format: /** @type {any} */ (7) }),
+    () => headerFooter(doc.bytes, {}),
+    () => bates(doc.bytes, { prefix: 'Ω' }),
+    () => bates(doc.bytes, { digits: 2.5 }),
   ];
   for (const [i, run] of bad.entries()) await assert.rejects(run(), { code: 'INVALID_OPTION' }, `case ${i}`);
 });
