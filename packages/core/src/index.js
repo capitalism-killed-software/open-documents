@@ -13,3 +13,4 @@ export { crop } from './pages/crop.js';
 export { nUp } from './pages/nup.js';
 export { insertBlankPages } from './pages/blank.js';
 export { addText, watermark, pageNumbers, headerFooter, bates } from './edit/text.js';
+export { setMetadata } from './edit/metadata.js';
