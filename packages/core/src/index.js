@@ -15,3 +15,4 @@ export { insertBlankPages } from './pages/blank.js';
 export { addText, watermark, pageNumbers, headerFooter, bates } from './edit/text.js';
 export { setMetadata } from './edit/metadata.js';
 export { getBookmarks, setBookmarks } from './edit/bookmarks.js';
+export { encrypt, decrypt } from './security.js';
