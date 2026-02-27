@@ -67,3 +67,19 @@ test('the form fixture has filled and empty fields', async () => {
   assert.deepEqual(form.getDropdown('colour').getSelected(), ['green']);
   assert.equal(form.getTextField('notes').getText(), undefined);
 });
+
+test('png and jpeg images decode to what was drawn', async () => {
+  const { pngImage, jpegImage } = await import('../src/index.js');
+  const jpeg = (await import('jpeg-js')).default;
+  const png = pngImage({ width: 8, height: 4 });
+  assert.deepEqual([...png.subarray(1, 4)], [0x50, 0x4e, 0x47]);
+  const jpg = jpegImage({ width: 16, height: 8, orientation: 6 });
+  assert.deepEqual([...jpg.subarray(0, 4)], [0xff, 0xd8, 0xff, 0xe1]);
+  const decoded = jpeg.decode(jpg, { useTArray: true });
+  assert.equal(decoded.width, 16);
+  assert.ok(decoded.data[0] > 200 && decoded.data[2] < 60, 'left is red');
+  const right = (8 * 16 - 1) * 4;
+  assert.ok(decoded.data[right + 2] > 200 && decoded.data[right] < 60, 'right is blue');
+  const plain = jpegImage({ width: 4, height: 4, fill: () => [0, 255, 0, 255] });
+  assert.deepEqual([...plain.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+});

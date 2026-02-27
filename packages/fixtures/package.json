@@ -8,6 +8,7 @@
     ".": "./src/index.js"
   },
   "dependencies": {
-    "@cantoo/pdf-lib": "2.5.3"
+    "@cantoo/pdf-lib": "2.5.3",
+    "jpeg-js": "0.4.4"
   }
 }

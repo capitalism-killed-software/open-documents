@@ -229,3 +229,4 @@ function setMetadata(doc, meta) {
   doc.setCreationDate(FIXED_DATE);
   doc.setModificationDate(FIXED_DATE);
 }
+export { pngImage, jpegImage } from './images.js';
