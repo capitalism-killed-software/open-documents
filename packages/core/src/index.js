@@ -16,3 +16,4 @@ export { addText, watermark, pageNumbers, headerFooter, bates } from './edit/tex
 export { setMetadata } from './edit/metadata.js';
 export { getBookmarks, setBookmarks } from './edit/bookmarks.js';
 export { encrypt, decrypt } from './security.js';
+export { imagesToPdf } from './convert/images.js';
