@@ -1,8 +1,9 @@
 import { engine } from './engine/pdfium.js';
 import { toPdfBytes } from './input.js';
-import { argbColor, numberIn, pageNumber } from './options.js';
+import { argbColor, numberIn } from './options.js';
 import { encodePng } from './png.js';
 import { fail } from './errors.js';
+import { selectPages } from './modify.js';
 
 // FPDF_RenderPageBitmap flags
 const FPDF_ANNOT = 0x01;
@@ -40,6 +41,40 @@ export const DEFAULT_MAX_PIXELS = 40_000_000; // about a letter page at 700 dpi
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(input, options = {}) {
+  const [page] = await render(input, [options.page ?? 1], options);
+  return page;
+}
+
+/**
+ * Draw several pages, opening the document once. Same options as renderPage, with `pages`
+ * (every page if left out) instead of `page`.
+ *
+ * @param {import('./input.js').DocumentInput} input
+ * @param {Omit<RenderOptions, 'page'> & { pages?: import('./modify.js').PageSelection }} [options]
+ * @returns {Promise<RenderedPage[]>}
+ */
+export async function renderPages(input, options = {}) {
+  return render(input, options.pages, options);
+}
+
+/**
+ * Small PNG previews of pages, `width` pixels wide (default 200).
+ *
+ * @param {import('./input.js').DocumentInput} input
+ * @param {{ pages?: import('./modify.js').PageSelection, width?: number, password?: string }} [options]
+ * @returns {Promise<RenderedPage[]>}
+ */
+export async function thumbnails(input, options = {}) {
+  return render(input, options.pages, { width: options.width ?? 200, password: options.password });
+}
+
+/**
+ * @param {import('./input.js').DocumentInput} input
+ * @param {import('./modify.js').PageSelection | undefined} pages
+ * @param {RenderOptions} options
+ * @returns {Promise<RenderedPage[]>}
+ */
+async function render(input, pages, options) {
   const bytes = await toPdfBytes(input);
   const pdf = await engine();
   const { fn } = pdf;
@@ -50,8 +85,8 @@ export async function renderPage(input, options = {}) {
   const flags = FPDF_REVERSE_BYTE_ORDER | (options.annotations === false ? 0 : FPDF_ANNOT);
 
   return pdf.withDocument(bytes, options, (doc) => {
-    const number = pageNumber(options.page ?? 1, 'page', fn.FPDF_GetPageCount(doc));
-    return pdf.withPage(doc, number - 1, (page) => {
+    const count = fn.FPDF_GetPageCount(doc);
+    return selectPages(pages, count).map((number) => pdf.withPage(doc, number - 1, (page) => {
       const pointsWide = fn.FPDF_GetPageWidthF(page);
       const pointsHigh = fn.FPDF_GetPageHeightF(page);
       const scale = options.width !== undefined
@@ -80,7 +115,7 @@ export async function renderPage(input, options = {}) {
       } finally {
         fn.FPDFBitmap_Destroy(bitmap);
       }
-    });
+    }));
   });
 }
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { textDocument } from '@open-documents/fixtures';
-import { renderPage } from '../src/index.js';
+import { renderPage, renderPages, thumbnails } from '../src/index.js';
 
 const letter = await textDocument({ pages: 2, rotation: [0, 90] });
 
@@ -132,4 +132,21 @@ test('bad options are refused', async () => {
 test('one-page documents say "1 page"', async () => {
   const single = await textDocument({ pages: 1 });
   await assert.rejects(renderPage(single.bytes, { page: 2 }), { message: /has 1 page\./ });
+});
+
+test('renderPages draws several pages from one open document', async () => {
+  const doc = await textDocument({ pages: 4, rotation: [0, 90, 0, 0] });
+  const all = await renderPages(doc.bytes, { dpi: 18, format: 'rgba' });
+  assert.deepEqual(all.map((p) => [p.page, p.width, p.height]), [[1, 153, 198], [2, 198, 153], [3, 153, 198], [4, 153, 198]]);
+  const some = await renderPages(doc.bytes, { pages: '4,2', dpi: 18 });
+  assert.deepEqual(some.map((p) => p.page), [4, 2]);
+  assert.equal(some[0].format, 'png');
+  await assert.rejects(renderPages(doc.bytes, { pages: [5] }), { code: 'PAGE_NOT_FOUND' });
+});
+
+test('thumbnails are small pngs of a set width', async () => {
+  const doc = await textDocument({ pages: 2 });
+  const thumbs = await thumbnails(doc.bytes);
+  assert.deepEqual(thumbs.map((t) => [t.width, t.format]), [[200, 'png'], [200, 'png']]);
+  assert.equal((await thumbnails(doc.bytes, { width: 64, pages: [2] }))[0].height, 83);
 });

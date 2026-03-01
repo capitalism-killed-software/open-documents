@@ -1,7 +1,7 @@
 export { OpenDocumentsError } from './errors.js';
 export { configure } from './engine/pdfium.js';
 export { inspect } from './inspect.js';
-export { renderPage } from './render.js';
+export { renderPage, renderPages, thumbnails } from './render.js';
 export { extractText, extractWords } from './text.js';
 export { pageRanges } from './ranges.js';
 export { rotate } from './pages/rotate.js';
