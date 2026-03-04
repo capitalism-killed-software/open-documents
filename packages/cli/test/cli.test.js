@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { textDocument } from '@open-documents/fixtures';
-import { inspect, extractText } from '@open-documents/core';
+import { textDocument, pngImage, jpegImage } from '@open-documents/fixtures';
+import { inspect, extractText, extractWords, getBookmarks, setBookmarks } from '@open-documents/core';
 import { main } from '../src/main.js';
 
 const BIN = fileURLToPath(new URL('../bin/opendocs.js', import.meta.url));
@@ -155,6 +155,68 @@ test('page commands explain what they need', async () => {
   assert.match((await run(['extract', pdf])).err, /needs --pages/);
   assert.match((await run(['rotate', pdf, '--angle', 'left'])).err, /--angle must be a whole number/);
   assert.match((await run(['crop', pdf, '--margins', '1,2'])).err, /one number or four/);
-  assert.match((await run(['crop', pdf, '--margins', 'wide'])).err, /number of points/);
+  assert.match((await run(['crop', pdf, '--margins', 'wide'])).err, /--margins must be a number/);
   assert.match((await run(['blank', pdf])).err, /needs --at/);
+});
+
+/** @param {string} file */
+const wordsOf = async (file) => (await extractWords(await readFile(file))).flatMap((p) => p.words.map((w) => w.text));
+
+test('stamp, watermark, numbers, header-footer and bates', async () => {
+  const o = (/** @type {string} */ name) => join(dir, name);
+  assert.equal((await run(['stamp', pdf, '--text', 'Approved', '--at', '72,300', '--size', '14', '-o', o('st.pdf')])).code, 0);
+  assert.ok((await wordsOf(o('st.pdf'))).includes('Approved'));
+  assert.equal((await run(['watermark', pdf, '--text', 'DRAFT', '--color', '#ff0000', '--opacity', '0.3', '--angle=-30', '--behind', '-o', o('wm.pdf')])).code, 0);
+  assert.equal((await wordsOf(o('wm.pdf'))).filter((w) => w === 'DRAFT').length, 3);
+  assert.equal((await run(['numbers', pdf, '--format', '#{n}', '--start', '5', '-o', o('nu.pdf')])).code, 0);
+  assert.ok((await wordsOf(o('nu.pdf'))).includes('#7'));
+  assert.equal((await run(['header-footer', pdf, '--header', 'Left||Right', '--footer', '|{n}/{total}|', '-o', o('hf.pdf')])).code, 0);
+  const hf = await wordsOf(o('hf.pdf'));
+  assert.ok(hf.includes('Left') && hf.includes('Right') && hf.includes('2/3'));
+  assert.equal((await run(['bates', pdf, '--prefix', 'X-', '--digits', '4', '--font', 'Courier-Bold', '-o', o('ba.pdf')])).code, 0);
+  assert.ok((await wordsOf(o('ba.pdf'))).includes('X-0003'));
+});
+
+test('meta sets fields; bookmarks prints the outline', async () => {
+  const o = (/** @type {string} */ name) => join(dir, name);
+  assert.equal((await run(['meta', pdf, '--title', 'Renamed', '--keywords', 'a, b', '-o', o('me.pdf')])).code, 0);
+  assert.equal((await inspect(await readFile(o('me.pdf')))).metadata.title, 'Renamed');
+  assert.match((await run(['meta', pdf])).err, /needs --title/);
+  assert.equal((await run(['bookmarks', pdf])).out, 'No bookmarks.\n');
+  await writeFile(o('bm.pdf'), await setBookmarks(await readFile(pdf), [{ title: 'Part 1', page: 1, children: [{ title: 'Intro', page: 2 }] }, { title: 'Notes' }]));
+  assert.equal((await run(['bookmarks', o('bm.pdf')])).out, 'Part 1  (page 1)\n  Intro  (page 2)\nNotes\n');
+  assert.deepEqual(JSON.parse((await run(['bookmarks', o('bm.pdf'), '--json'])).out), await getBookmarks(await readFile(o('bm.pdf'))));
+});
+
+test('encrypt and decrypt', async () => {
+  const o = (/** @type {string} */ name) => join(dir, name);
+  assert.equal((await run(['encrypt', pdf, '--user-password', 'u', '--owner-password', 'o', '--no-copy', '--no-print', '--no-modify', '--no-annotate', '-o', o('en.pdf')])).code, 0);
+  assert.match((await run(['info', o('en.pdf')])).err, /password is missing or wrong/);
+  assert.match((await run(['info', o('en.pdf'), '--password', 'u'])).out, /^Encrypted\s+yes$/m);
+  assert.match((await run(['decrypt', o('en.pdf'), '--password', 'u', '-o', o('de.pdf')])).err, /owner password/);
+  assert.equal((await run(['decrypt', o('en.pdf'), '--password', 'o', '-o', o('de.pdf')])).code, 0);
+  assert.match((await run(['info', o('de.pdf')])).out, /^Encrypted\s+no$/m);
+});
+
+test('images makes a pdf from photos', async () => {
+  const o = (/** @type {string} */ name) => join(dir, name);
+  await writeFile(o('a.png'), pngImage({ width: 200, height: 100 }));
+  await writeFile(o('b.jpg'), jpegImage({ width: 100, height: 200 }));
+  const { code, out } = await run(['images', o('a.png'), o('b.jpg'), '--page-size', 'a4', '--margin', '20', '-o', o('im.pdf')]);
+  assert.equal(code, 0);
+  assert.match(out, /im\.pdf {2}2 pages/);
+  assert.match((await run(['images'])).err, /needs one or more JPEG or PNG/);
+});
+
+test('render --pages writes one png per page', async () => {
+  const { code, out } = await run(['render', pdf, '--pages', '2-3', '--width', '50', '-o', dir]);
+  assert.equal(code, 0);
+  assert.match(out, /sample-2\.png {2}50 x 39\n.*sample-3\.png {2}50 x 65\n/s);
+});
+
+test('edit commands explain what they need', async () => {
+  assert.match((await run(['watermark', pdf])).err, /needs --text/);
+  assert.match((await run(['stamp', pdf, '--text', 'x', '--at', '5'])).err, /x,y/);
+  assert.match((await run(['numbers', pdf, '--size', 'big'])).err, /--size must be a number/);
+  assert.match((await run(['numbers', pdf, '--start', 'one'])).err, /--start must be a whole number/);
 });

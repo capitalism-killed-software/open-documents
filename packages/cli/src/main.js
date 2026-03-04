@@ -8,7 +8,7 @@ const USAGE = `opendocs: inspect, render and change PDF files
 Look:
   opendocs info <file.pdf> [--json]
   opendocs text <file.pdf> [--pages 1-3,5]
-  opendocs render <file.pdf> [--page N] [--dpi N | --width PX] [-o out.png]
+  opendocs render <file.pdf> [--page N | --pages 1-3] [--dpi N | --width PX] [-o out.png]
 
 Pages (each writes a new file; -o names it):
   opendocs merge <a.pdf> <b.pdf> ... -o out.pdf
@@ -21,6 +21,21 @@ Pages (each writes a new file; -o names it):
   opendocs crop <file.pdf> --margins 36 | --margins top,right,bottom,left [--pages ...]
   opendocs nup <file.pdf> [--columns 2] [--rows 1]
   opendocs blank <file.pdf> --at N [--count N]
+
+Edit (each writes a new file; -o names it):
+  opendocs stamp <file.pdf> --text "..." [--position top-right | --at x,y] [--size N]
+  opendocs watermark <file.pdf> --text DRAFT [--color #ff0000] [--opacity 0.25] [--angle 45] [--behind]
+  opendocs numbers <file.pdf> [--format "Page {n} of {total}"] [--start N] [--position bottom-center]
+  opendocs header-footer <file.pdf> [--header "left|center|right"] [--footer "left|center|right"]
+  opendocs bates <file.pdf> [--prefix ACME-] [--start N] [--digits 6]
+  opendocs meta <file.pdf> [--title ...] [--author ...] [--subject ...] [--keywords ...]
+  opendocs bookmarks <file.pdf> [--json]
+  opendocs encrypt <file.pdf> [--user-password pw] [--owner-password pw] [--no-print] [--no-copy] [--no-modify]
+  opendocs decrypt <file.pdf> --password pw
+  opendocs images <a.jpg> <b.png> ... -o out.pdf [--page-size letter|a4|legal|fit] [--margin N]
+
+Text options for stamp, watermark, numbers, header-footer and bates:
+  --size N  --color #rrggbb  --opacity 0..1  --font Helvetica-Bold  --pages ...
 
 Options:
   --password <pw>   for encrypted files
@@ -54,6 +69,31 @@ const OPTIONS = {
   rows: { type: 'string' },
   margins: { type: 'string' },
   count: { type: 'string' },
+  text: { type: 'string' },
+  color: { type: 'string' },
+  opacity: { type: 'string' },
+  size: { type: 'string' },
+  font: { type: 'string' },
+  position: { type: 'string' },
+  behind: { type: 'boolean' },
+  format: { type: 'string' },
+  start: { type: 'string' },
+  prefix: { type: 'string' },
+  digits: { type: 'string' },
+  header: { type: 'string' },
+  footer: { type: 'string' },
+  title: { type: 'string' },
+  author: { type: 'string' },
+  subject: { type: 'string' },
+  keywords: { type: 'string' },
+  'user-password': { type: 'string' },
+  'owner-password': { type: 'string' },
+  'no-print': { type: 'boolean' },
+  'no-copy': { type: 'boolean' },
+  'no-modify': { type: 'boolean' },
+  'no-annotate': { type: 'boolean' },
+  'page-size': { type: 'string' },
+  margin: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -93,6 +133,79 @@ const COMMANDS = {
         }),
       ),
   },
+  stamp: {
+    files: 'one',
+    run: (ctx) => {
+      const at = ctx.values.at === undefined ? undefined : point(ctx.values.at);
+      return change(ctx, async (bytes, pw) => od.addText(bytes, { ...pw, ...style(ctx), text: required(ctx, 'text'), at, position: ctx.values.position }));
+    },
+  },
+  watermark: {
+    files: 'one',
+    run: (ctx) =>
+      change(ctx, async (bytes, pw) =>
+        od.watermark(bytes, {
+          ...pw,
+          ...style(ctx),
+          text: required(ctx, 'text'),
+          angle: ctx.values.angle === undefined ? undefined : number(ctx.values.angle, '--angle', true),
+          position: ctx.values.position,
+          behind: ctx.values.behind,
+        }),
+      ),
+  },
+  numbers: {
+    files: 'one',
+    run: (ctx) =>
+      change(ctx, async (bytes, pw) =>
+        od.pageNumbers(bytes, { ...pw, ...style(ctx), format: ctx.values.format, start: optionalInteger(ctx, 'start'), position: ctx.values.position }),
+      ),
+  },
+  'header-footer': {
+    files: 'one',
+    run: (ctx) =>
+      change(ctx, async (bytes, pw) =>
+        od.headerFooter(bytes, { ...pw, ...style(ctx), header: band(ctx.values.header), footer: band(ctx.values.footer), start: optionalInteger(ctx, 'start'), title: ctx.values.title }),
+      ),
+  },
+  bates: {
+    files: 'one',
+    run: (ctx) =>
+      change(ctx, async (bytes, pw) =>
+        od.bates(bytes, { ...pw, ...style(ctx), prefix: ctx.values.prefix, start: optionalInteger(ctx, 'start'), digits: optionalInteger(ctx, 'digits'), position: ctx.values.position }),
+      ),
+  },
+  meta: {
+    files: 'one',
+    run: (ctx) => {
+      const fields = Object.fromEntries(['title', 'author', 'subject', 'keywords'].filter((k) => ctx.values[k] !== undefined).map((k) => [k, ctx.values[k]]));
+      if (!Object.keys(fields).length) throw new od.OpenDocumentsError('INVALID_OPTION', 'opendocs meta needs --title, --author, --subject or --keywords. Use opendocs info to read them.');
+      return change(ctx, async (bytes, pw) => od.setMetadata(bytes, { ...pw, ...fields }));
+    },
+  },
+  bookmarks: { files: 'one', run: bookmarks },
+  encrypt: {
+    files: 'one',
+    run: (ctx) => {
+      const v = ctx.values;
+      /** @type {import('@open-documents/core').Permissions} */
+      const permissions = {};
+      if (v['no-print']) permissions.print = false;
+      if (v['no-copy']) permissions.copy = false;
+      if (v['no-modify']) permissions.modify = false;
+      if (v['no-annotate']) permissions.annotate = false;
+      return change(ctx, async (bytes, pw) =>
+        od.encrypt(bytes, {
+          ...pw,
+          userPassword: v['user-password'],
+          ownerPassword: v['owner-password'],
+          permissions: Object.keys(permissions).length ? permissions : undefined,
+        }),
+      );
+    },
+  },
+  decrypt: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.decrypt(bytes, pw)) },
+  images: { files: 'many', run: images },
 };
 
 /**
@@ -121,7 +234,11 @@ export async function main(argv, io) {
     return 2;
   }
   if (files.length === 0 || (spec.files === 'one' && files.length > 1) || (command === 'merge' && files.length < 2)) {
-    io.err(command === 'merge' ? 'opendocs merge needs two or more PDF files.\n' : `opendocs ${command} needs one PDF file.\n`);
+    io.err(
+      command === 'merge' ? 'opendocs merge needs two or more PDF files.\n'
+        : command === 'images' ? 'opendocs images needs one or more JPEG or PNG files.\n'
+          : `opendocs ${command} needs one PDF file.\n`,
+    );
     return 2;
   }
 
@@ -174,6 +291,21 @@ async function info({ files, values, io }) {
 
 /** @param {Context} ctx */
 async function render({ files, values, io }) {
+  if (values.pages !== undefined) {
+    const pages = await od.renderPages(await readFile(files[0]), {
+      pages: values.pages,
+      dpi: values.dpi ? integer(values.dpi, '--dpi') : undefined,
+      width: values.width ? integer(values.width, '--width') : undefined,
+      password: values.password,
+    });
+    const folder = values.output ?? '.';
+    for (const p of pages) {
+      const target = join(folder, `${stem(files[0])}-${p.page}.png`);
+      await writeFile(target, p.data);
+      io.out(`${target}  ${p.width} x ${p.height}\n`);
+    }
+    return;
+  }
   const page = values.page ? integer(values.page, '--page') : 1;
   const out = await od.renderPage(await readFile(files[0]), {
     page,
@@ -218,6 +350,41 @@ async function split({ files, values, io }) {
     await writeFile(target, part);
     await report(io, target, part);
   }
+}
+
+/** @param {Context} ctx */
+async function bookmarks({ files, values, io }) {
+  const tree = await od.getBookmarks(await readFile(files[0]), { password: values.password });
+  if (values.json) {
+    io.out(`${JSON.stringify(tree, null, 2)}\n`);
+    return;
+  }
+  if (!tree.length) {
+    io.out('No bookmarks.\n');
+    return;
+  }
+  /** @type {(items: typeof tree, depth: number) => void} */
+  const print = (items, depth) => {
+    for (const b of items) {
+      io.out(`${'  '.repeat(depth)}${b.title}${b.page ? `  (page ${b.page})` : ''}\n`);
+      print(b.children, depth + 1);
+    }
+  };
+  print(tree, 0);
+}
+
+/** @param {Context} ctx */
+async function images({ files, values, io }) {
+  const target = values.output ?? 'images.pdf';
+  refuseOverwrite(target, files);
+  const size = values['page-size'];
+  const out = await od.imagesToPdf(await Promise.all(files.map((f) => readFile(f))), {
+    pageSize: size,
+    margin: values.margin === undefined ? undefined : number(values.margin, '--margin'),
+    title: values.title,
+  });
+  await writeFile(target, out);
+  await report(io, target, out);
 }
 
 /**
@@ -267,6 +434,48 @@ function required(ctx, name) {
 }
 
 /** @param {Context} ctx */
+function style(ctx) {
+  const v = ctx.values;
+  return {
+    size: v.size === undefined ? undefined : number(v.size, '--size'),
+    color: v.color,
+    opacity: v.opacity === undefined ? undefined : number(v.opacity, '--opacity'),
+    font: v.font,
+    pages: v.pages,
+  };
+}
+
+/**
+ * "left|center|right", any part may be empty.
+ * @param {string | undefined} value
+ */
+function band(value) {
+  if (value === undefined) return undefined;
+  const [left, center, right] = value.split('|');
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (left) out.left = left;
+  if (center) out.center = center;
+  if (right) out.right = right;
+  return out;
+}
+
+/** @param {string} value */
+function point(value) {
+  const parts = value.split(',').map((n) => number(n.trim(), '--at'));
+  if (parts.length !== 2) throw new od.OpenDocumentsError('INVALID_OPTION', '--at takes x,y in points from the top left.');
+  return { x: parts[0], y: parts[1] };
+}
+
+/**
+ * @param {Context} ctx
+ * @param {string} name
+ */
+function optionalInteger(ctx, name) {
+  return ctx.values[name] === undefined ? undefined : integer(ctx.values[name], `--${name}`);
+}
+
+/** @param {Context} ctx */
 function grid(ctx) {
   return {
     columns: ctx.values.columns === undefined ? undefined : integer(ctx.values.columns, '--columns'),
@@ -298,9 +507,11 @@ function integer(value, name) {
 /**
  * @param {string} value
  * @param {string} name
+ * @param {boolean} [signed]
  */
-function number(value, name) {
-  if (!/^\d+(\.\d+)?$/.test(value)) throw new od.OpenDocumentsError('INVALID_OPTION', `${name} must be a number of points.`);
+function number(value, name, signed = false) {
+  const pattern = signed ? /^-?\d+(\.\d+)?$/ : /^\d*\.?\d+$/;
+  if (!pattern.test(value)) throw new od.OpenDocumentsError('INVALID_OPTION', `${name} must be a number.`);
   return Number(value);
 }
 
