@@ -1,0 +1,14 @@
+{
+  "name": "open-documents-example-browser",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Merge, split, rotate and watermark PDFs in the browser. Nothing is uploaded.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node build.js && node serve.js"
+  },
+  "dependencies": {
+    "@open-documents/core": "0.0.0"
+  }
+}

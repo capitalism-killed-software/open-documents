@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open Documents in the browser</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; }
+    .drop { display: block; border: 2px dashed #999; border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; }
+    .drop.over { border-color: #222; background: #f4f4f4; }
+    ul.files { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+    ul.files li { border: 1px solid #ddd; border-radius: 6px; padding: .5rem; font-size: .85rem; word-break: break-all; }
+    ul.files img { width: 100%; display: block; margin-bottom: .4rem; background: #fafafa; }
+    .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+    button { font: inherit; padding: .5rem 1rem; border-radius: 6px; border: 1px solid #222; background: #222; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .4; cursor: default; }
+    #status { min-height: 1.5em; }
+    #results a { display: block; }
+  </style>
+</head>
+<body>
+  <h1>Open Documents in the browser</h1>
+  <p>Pick some PDFs. Everything happens on this page; nothing is uploaded.</p>
+  <label class="drop" id="drop">
+    <input type="file" id="pick" accept="application/pdf" multiple hidden>
+    Drop PDFs here, or click to choose
+  </label>
+  <ul class="files" id="files"></ul>
+  <div class="actions">
+    <button id="merge" disabled>Merge all</button>
+    <button id="split" disabled>Split into pages</button>
+    <button id="rotate" disabled>Rotate all 90°</button>
+    <button id="watermark" disabled>Watermark DRAFT</button>
+  </div>
+  <p id="status" role="status"></p>
+  <div id="results"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
