@@ -10,41 +10,61 @@ many companies cannot ship. Open Documents is built only from permissively licen
 you can embed it in a closed-source product. Apache-2.0, checked on every change
 (see [docs/licensing.md](docs/licensing.md)).
 
-**Early.** The core reads, renders and extracts text today. It is not on npm yet.
+**Early.** The JavaScript library and the command line work today, in Node and in browsers.
+Nothing is on npm yet.
 
 ## What works
 
 ```js
-import { inspect, renderPage, extractText, extractWords, pageRanges } from '@open-documents/core';
+import { merge, split, rotate, watermark, pageNumbers, encrypt, renderPage } from '@open-documents/core';
 
-const info = await inspect(bytes);                 // pages, sizes, rotation, metadata, forms, security
-const png = await renderPage(bytes, { page: 1, dpi: 144 });
-const text = await extractText(bytes, { pages: pageRanges('1-3,last', info.pageCount) });
-const words = await extractWords(bytes);           // every word with its box, in points
+const combined = await merge([contract, appendix], { bookmarks: true });
+const pages = await split(combined);                          // one file per page
+const turned = await rotate(scan, { angle: 90, pages: '2-last' });
+const draft = await watermark(combined, { text: 'DRAFT' });
+const numbered = await pageNumbers(draft, { format: 'Page {n} of {total}' });
+const locked = await encrypt(numbered, { userPassword: 'open', permissions: { copy: false } });
+const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 ```
 
-Input is a `Uint8Array`, `ArrayBuffer` or `Blob`. Encrypted files take a `password` option.
-Errors are `OpenDocumentsError` with a stable `code`.
+- **Read:** page sizes, rotation, metadata, security, forms, bookmarks; text and words with
+  their positions; render pages to PNG
+- **Pages:** merge, split, extract, remove, reorder, rotate, slice a page into pieces, crop,
+  N-up, insert blank pages
+- **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, metadata,
+  bookmarks
+- **Security:** AES-256 encryption with permissions, and removing it
+- **Convert:** JPEG and PNG images to PDF, turned the right way up
+
+Input is a `Uint8Array`, `ArrayBuffer` or `Blob`, and every function returns new bytes.
+See [docs/api.md](docs/api.md) for every option.
 
 From the command line:
 
 ```sh
-opendocs info contract.pdf
-opendocs render contract.pdf --page 2 --dpi 150 -o page2.png
-opendocs text contract.pdf --pages 1-3
+opendocs merge contract.pdf appendix.pdf -o both.pdf
+opendocs split both.pdf --every 1 -o pages/
+opendocs slice scan.pdf --columns 2          # a scanned spread into two pages
+opendocs watermark both.pdf --text DRAFT
+opendocs numbers both.pdf --format "Page {n} of {total}"
+opendocs encrypt both.pdf --user-password open --no-copy
+opendocs render both.pdf --page 2 --dpi 150 -o page2.png
 ```
+
+Run `opendocs --help` for the rest.
+
+In the browser the engine runs on the page, so files never leave the computer: see
+[examples/browser](examples/browser).
 
 ## Planned
 
-- **Pages:** merge, split, slice, extract, reorder, rotate, crop, N-up, insert blank pages
-- **Edit:** text, images, watermarks, page numbers, headers and footers, Bates numbers,
-  metadata, bookmarks
+- **Edit:** images, links, existing text
 - **To PDF:** Word, Excel, PowerPoint, OpenDocument, HTML and web pages, Markdown, images, email
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
 - **More:** annotations, forms, OCR, compare, compress, PDF/A, true redaction, digital
-  signatures
-- **Ways to use it:** the JavaScript library (browser and Node), a self-hosted API in Docker,
-  and a viewer and editor component that works in any front-end framework
+  signatures, fonts beyond Latin
+- **Ways to use it:** a self-hosted API in Docker, and a viewer and editor component that
+  works in any front-end framework
 
 ## Develop
 
