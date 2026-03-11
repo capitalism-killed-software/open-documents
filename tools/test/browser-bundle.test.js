@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { textDocument } from '@open-documents/fixtures';
 
@@ -42,7 +42,7 @@ test('the browser bundle merges, splits and renders', async () => {
   const result = await build({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'browser', write: false, logLevel: 'silent' });
   const file = join(dir, 'core.browser.js');
   await writeFile(file, result.outputFiles[0].text);
-  const od = await import(file);
+  const od = await import(pathToFileURL(file).href);
   od.configure({ wasmUrl });
   const a = await textDocument({ pages: 2, lines: (n) => [`A${n}`] });
   const b = await textDocument({ pages: 1, lines: () => ['B1'] });
