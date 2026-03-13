@@ -1,0 +1,19 @@
+{
+  "name": "@open-documents/node",
+  "version": "0.0.0",
+  "description": "Conversions that need other programs: Office documents, web pages, Markdown and email to PDF. Node only.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@open-documents/core": "0.0.0"
+  }
+}
