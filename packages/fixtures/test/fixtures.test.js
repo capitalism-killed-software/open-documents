@@ -83,3 +83,18 @@ test('png and jpeg images decode to what was drawn', async () => {
   const plain = jpegImage({ width: 4, height: 4, fill: () => [0, 255, 0, 255] });
   assert.deepEqual([...plain.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 });
+
+test('office fixtures are the files they claim to be', async () => {
+  const { docxDocument, pptxDocument, xlsxDocument, odtDocument, rtfDocument, csvDocument } = await import('../src/index.js');
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const docx = await docxDocument();
+  assert.ok('word/document.xml' in unzipSync(docx.bytes));
+  assert.ok(docx.words.includes('Quarterly') && docx.words.includes('1200'));
+  assert.ok('ppt/presentation.xml' in unzipSync((await pptxDocument()).bytes));
+  const xlsx = unzipSync(xlsxDocument().bytes);
+  assert.match(strFromU8(xlsx['xl/worksheets/sheet1.xml']), /<t>North<\/t>/);
+  const odt = odtDocument().bytes;
+  assert.equal(strFromU8(odt.subarray(30, 38)), 'mimetype', 'mimetype is the first entry');
+  assert.match(strFromU8(rtfDocument().bytes), /^\{\\rtf1/);
+  assert.equal(strFromU8(csvDocument().bytes).split('\n')[1], 'North,1200');
+});

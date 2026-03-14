@@ -9,6 +9,9 @@
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.5.3",
-    "jpeg-js": "0.4.4"
+    "docx": "9.6.1",
+    "fflate": "0.8.2",
+    "jpeg-js": "0.4.4",
+    "pptxgenjs": "4.0.1"
   }
 }

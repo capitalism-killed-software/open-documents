@@ -230,3 +230,4 @@ function setMetadata(doc, meta) {
   doc.setModificationDate(FIXED_DATE);
 }
 export { pngImage, jpegImage } from './images.js';
+export { docxDocument, pptxDocument, xlsxDocument, odtDocument, rtfDocument, csvDocument, REPORT } from './office.js';
