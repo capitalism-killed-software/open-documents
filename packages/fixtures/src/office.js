@@ -1,6 +1,6 @@
 // Office documents built in code, each with the text it must come out with once converted.
 // DOCX and PPTX use their libraries; XLSX, ODT, RTF and CSV are small enough to write by hand.
-import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun } from 'docx';
+import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType } from 'docx';
 import PptxGenJS from 'pptxgenjs';
 import { zipSync, strToU8 } from 'fflate';
 
@@ -35,7 +35,12 @@ export async function docxDocument() {
           new Paragraph({ text: REPORT.title, heading: HeadingLevel.HEADING_1 }),
           ...REPORT.paragraphs.map((p) => new Paragraph({ children: [new TextRun(p)] })),
           new Table({
-            rows: REPORT.table.map((row) => new TableRow({ children: row.map((cell) => new TableCell({ children: [new Paragraph(cell)] })) })),
+            // without widths, LibreOffice draws the table zero wide
+            width: { size: 9000, type: WidthType.DXA },
+            columnWidths: [4500, 4500],
+            rows: REPORT.table.map((row) => new TableRow({
+              children: row.map((cell) => new TableCell({ width: { size: 4500, type: WidthType.DXA }, children: [new Paragraph(cell)] })),
+            })),
           }),
         ],
       },
@@ -111,4 +116,23 @@ function zip(files) {
   const mtime = new Date('2020-01-01T00:00:00Z');
   for (const [name, text] of Object.entries(files)) entries[name] = [strToU8(text), { level: name === 'mimetype' ? 0 : 6, mtime }];
   return zipSync(entries);
+}
+
+/**
+ * A DOCX whose only picture is linked from `url` instead of stored in the file. Converting it
+ * must never fetch the link.
+ *
+ * @param {string} url
+ * @returns {OfficeFixture}
+ */
+export function docxWithLinkedImage(url) {
+  const ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  const picture = `<w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="linked.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:link="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
+  const files = {
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+    'word/_rels/document.xml.rels': `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${xml(url)}" TargetMode="External"/></Relationships>`,
+    'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document ${ns}><w:body><w:p><w:r><w:t>Before the picture.</w:t></w:r></w:p><w:p><w:r>${picture}</w:r></w:p></w:body></w:document>`,
+  };
+  return { bytes: zip(files), ext: 'docx', words: ['Before', 'the', 'picture.'] };
 }
