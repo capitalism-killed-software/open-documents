@@ -22,4 +22,23 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # converters are tested in the conversions job, where LibreOffice is installed
+      - run: npm run check:portable
+
+  conversions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: LibreOffice and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer libreoffice-calc libreoffice-impress \
+            fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation fonts-noto-core
+          soffice --version
+      - run: npm ci
       - run: npm run check

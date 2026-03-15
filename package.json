@@ -13,8 +13,10 @@
     "lint": "eslint .",
     "test": "node --test \"packages/*/test/**/*.test.js\" \"tools/test/*.test.js\"",
     "coverage": "node --test --experimental-test-coverage --test-coverage-exclude=\"**/test/**\" --test-coverage-exclude=\"**/node_modules/**\" --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=90 \"packages/*/test/**/*.test.js\" \"tools/test/*.test.js\"",
+    "coverage:portable": "node --test --experimental-test-coverage --test-coverage-exclude=\"**/test/**\" --test-coverage-exclude=\"**/node_modules/**\" --test-coverage-exclude=\"packages/node/src/libreoffice.js\" --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=90 \"packages/*/test/**/*.test.js\" \"tools/test/*.test.js\"",
     "licences": "node tools/check-licences.js",
-    "check": "npm run lint && npm run licences && npm run coverage"
+    "check": "npm run lint && npm run licences && npm run coverage",
+    "check:portable": "npm run lint && npm run licences && npm run coverage:portable"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
