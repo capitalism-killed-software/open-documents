@@ -1,10 +1,15 @@
-// HTML to PDF with headless Chromium, through playwright-core.
+// HTML and web pages to PDF with headless Chromium, through playwright-core.
 //
 // Uploaded HTML renders with the network off. Every host name fails to resolve, and every
 // request is answered from the files that came with the HTML or refused. A page can only see
 // what it was given.
+//
+// Web pages load through our egress proxy (egress.js), which refuses private and special
+// addresses. Each conversion gets its own proxy, so its allow list and what it refused stay
+// its own.
 import { chromium } from 'playwright-core';
 import { OpenDocumentsError } from '@open-documents/core';
+import { createEgressProxy } from './egress.js';
 
 const ORIGIN = 'https://document.opendocs.invalid';
 
@@ -35,6 +40,18 @@ const ORIGIN = 'https://document.opendocs.invalid';
  */
 
 /**
+ * @typedef {PdfLayout & {
+ *   allowHosts?: string[],
+ *   ports?: number[],
+ *   javascript?: boolean,
+ *   timeout?: number,
+ *   waitFor?: 'load' | 'networkidle',
+ * }} UrlOptions
+ *   allowHosts: names or addresses the page may reach even though they are private, such as an
+ *   intranet server. ports: other ports to allow; default 80 and 443. javascript: default true.
+ */
+
+/**
  * @typedef {object} ChromiumOptions
  * @property {string} [executablePath]  default $OPENDOCS_CHROMIUM, else Playwright's own build
  * @property {number} [concurrency]     pages at once; default 4
@@ -50,6 +67,8 @@ export function createChromium(options = {}) {
   const defaultTimeout = options.timeout ?? 60_000;
   /** @type {Promise<import('playwright-core').Browser> | null} */
   let offline = null;
+  /** @type {Promise<import('playwright-core').Browser> | null} */
+  let online = null;
   let active = 0;
   /** @type {(() => void)[]} */
   const waiting = [];
@@ -60,6 +79,13 @@ export function createChromium(options = {}) {
       '--host-resolver-rules=MAP * ~NOTFOUND',
     ]).catch((err) => {
       offline = null;
+      throw err;
+    }));
+
+  // every context sets its own proxy; the browser-wide one is never used
+  const launchOnline = () =>
+    (online ??= launch(executablePath, [], { server: 'http://per-context' }).catch((err) => {
+      online = null;
       throw err;
     }));
 
@@ -102,10 +128,57 @@ export function createChromium(options = {}) {
         done();
       }
     },
+    /**
+     * @param {string} url
+     * @param {UrlOptions} [opts]
+     * @returns {Promise<Uint8Array>}
+     */
+    async urlToPdf(url, opts = {}) {
+      if (typeof url !== 'string' || !URL.canParse(url)) throw new OpenDocumentsError('INVALID_INPUT', 'That is not a web address.');
+      const target = new URL(url);
+      if (target.protocol !== 'http:' && target.protocol !== 'https:') throw new OpenDocumentsError('INVALID_OPTION', 'Only http and https addresses can be converted.');
+      const browser = await launchOnline();
+      const proxy = await createEgressProxy({ allowHosts: opts.allowHosts, ports: opts.ports });
+      await slot();
+      const context = await browser.newContext({
+        proxy: { server: proxy.url, bypass: '<-loopback>' },
+        javaScriptEnabled: opts.javascript ?? true,
+        serviceWorkers: 'block',
+        acceptDownloads: false,
+      });
+      /** @param {string} address */
+      const wasRefused = (address) => {
+        const host = URL.canParse(address) ? new URL(address).hostname.toLowerCase().replace(/^\[|\]$/g, '') : '';
+        return proxy.refused.find((r) => r.host === host);
+      };
+      try {
+        // file:, chrome: and the like never leave the browser, so the proxy cannot see them
+        await context.route('**/*', (route) => (/^(https?|data|blob):/i.test(route.request().url()) ? route.continue() : route.abort('blockedbyclient')));
+        const page = await context.newPage();
+        return await withTimeout(opts.timeout ?? defaultTimeout, async () => {
+          let response;
+          try {
+            response = await page.goto(url, { waitUntil: opts.waitFor ?? 'load' });
+          } catch (err) {
+            const refused = proxy.refused[proxy.refused.length - 1];
+            if (refused) throw new OpenDocumentsError('BLOCKED', `Not allowed to reach ${refused.host}: ${refused.reason}.`, { cause: err });
+            throw new OpenDocumentsError('CONVERSION_FAILED', `The page could not be loaded: ${/** @type {Error} */ (err).message.split('\n')[0]}`, { cause: err });
+          }
+          const refused = response && response.status() === 403 && wasRefused(response.url());
+          if (refused) throw new OpenDocumentsError('BLOCKED', `Not allowed to reach ${refused.host}: ${refused.reason}.`);
+          if (response && response.status() >= 400) throw new OpenDocumentsError('CONVERSION_FAILED', `The page answered with HTTP ${response.status()}.`);
+          return toPdf(page, opts);
+        });
+      } finally {
+        await context.close().catch(() => {});
+        await proxy.close();
+        done();
+      }
+    },
     async close() {
-      const b = await offline?.catch(() => null);
-      offline = null;
-      await b?.close();
+      const browsers = await Promise.all([offline, online].map((b) => b?.catch(() => null)));
+      offline = online = null;
+      await Promise.all(browsers.map((b) => b?.close()));
     },
   };
 }
@@ -113,12 +186,14 @@ export function createChromium(options = {}) {
 /**
  * @param {string | undefined} executablePath
  * @param {string[]} extra
+ * @param {{ server: string }} [proxy]
  */
-async function launch(executablePath, extra) {
+async function launch(executablePath, extra, proxy) {
   try {
     return await chromium.launch({
       executablePath,
       headless: true,
+      proxy,
       args: ['--disable-dev-shm-usage', '--no-first-run', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--mute-audio', ...extra],
     });
   } catch (err) {

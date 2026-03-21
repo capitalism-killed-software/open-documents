@@ -119,3 +119,65 @@ test('a missing Chromium is reported', async () => {
   await assert.rejects(missing.htmlToPdf('<p>x</p>'), { code: 'ENGINE_MISSING' });
   await missing.close();
 });
+
+/** A small site: a page, a page with an image from elsewhere, and a redirect. */
+function site() {
+  /** @type {string[]} */
+  const seen = [];
+  const s = createServer((req, res) => {
+    seen.push(String(req.url));
+    if (req.url === '/') return res.writeHead(200, { 'content-type': 'text/html' }).end('<h1>Public page</h1>');
+    if (req.url?.startsWith('/with-image')) {
+      const port = new URL(req.url, 'http://x').searchParams.get('port');
+      return res.writeHead(200, { 'content-type': 'text/html' }).end(`<p>Has an image</p><img src="http://localhost:${port}/private.png">`);
+    }
+    if (req.url?.startsWith('/redirect')) {
+      const port = new URL(req.url, 'http://x').searchParams.get('port');
+      return res.writeHead(302, { location: `http://localhost:${port}/admin` }).end();
+    }
+    res.writeHead(404).end();
+  });
+  return { server: s, seen };
+}
+
+test('a web page through the proxy', { skip }, async () => {
+  const { server, seen } = site();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  try {
+    const pdf = await chrome.urlToPdf(`http://127.0.0.1:${port}/`, { allowHosts: ['127.0.0.1'] });
+    assert.match(await textOf(pdf), /Public page/);
+    assert.ok(seen.includes('/'));
+  } finally {
+    server.close();
+  }
+});
+
+test('private addresses are refused, even on this machine', { skip }, async () => {
+  hits.length = 0;
+  await assert.rejects(chrome.urlToPdf(`${base}/admin`), { code: 'BLOCKED', message: /127\.0\.0\.1/ });
+  await assert.rejects(chrome.urlToPdf(base.replace('127.0.0.1', 'localhost') + '/admin'), { code: 'BLOCKED' });
+  await assert.rejects(chrome.urlToPdf('http://169.254.169.254/latest/meta-data/'), { code: 'BLOCKED' });
+  assert.deepEqual(hits, []);
+});
+
+test('an allowed page cannot pull in private things or redirect to them', { skip }, async () => {
+  const { server } = site();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (server.address()).port;
+  const privatePort = Number(new URL(base).port);
+  try {
+    hits.length = 0;
+    const pdf = await chrome.urlToPdf(`http://127.0.0.1:${port}/with-image?port=${privatePort}`, { allowHosts: ['127.0.0.1'] });
+    assert.match(await textOf(pdf), /Has an image/);
+    await assert.rejects(chrome.urlToPdf(`http://127.0.0.1:${port}/redirect?port=${privatePort}`, { allowHosts: ['127.0.0.1'] }), { code: 'BLOCKED', message: /localhost/ });
+    assert.deepEqual(hits, [], 'the private server was never reached');
+  } finally {
+    server.close();
+  }
+});
+
+test('only web addresses', { skip }, async () => {
+  await assert.rejects(chrome.urlToPdf('file:///etc/passwd'), { code: 'INVALID_OPTION' });
+  await assert.rejects(chrome.urlToPdf('not a url'), { code: 'INVALID_INPUT' });
+});
