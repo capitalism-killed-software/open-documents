@@ -181,3 +181,9 @@ test('only web addresses', { skip }, async () => {
   await assert.rejects(chrome.urlToPdf('file:///etc/passwd'), { code: 'INVALID_OPTION' });
   await assert.rejects(chrome.urlToPdf('not a url'), { code: 'INVALID_INPUT' });
 });
+
+test('markdown through chromium', { skip }, async () => {
+  const { markdownToHtml } = await import('../src/index.js');
+  const pdf = await chrome.htmlToPdf(markdownToHtml('# Notes\n\n- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |'));
+  assert.match(await textOf(pdf), /Notes[\s\S]*one[\s\S]*two/);
+});
