@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument } from '@open-documents/fixtures';
+import { textDocument, splitLettersDocument } from '@open-documents/fixtures';
 import { extractText, extractWords } from '../src/index.js';
 
 const doc = await textDocument({ pages: 3, rotation: [0, 90, 0] });
@@ -79,4 +79,13 @@ test('encrypted files give up their text with the password', async () => {
   await assert.rejects(extractText(locked.bytes), { code: 'PASSWORD_REQUIRED' });
   const [page] = await extractText(locked.bytes, { password: 'open' });
   assert.equal(page.text, locked.truth.pages[0].lines.join('\n'));
+});
+
+test('letters written one by one on a baseline still make a word', async () => {
+  const split = await splitLettersDocument('Notes');
+  assert.equal((await extractText(split.bytes))[0].text, 'Notes');
+  const [{ words }] = await extractWords(split.bytes);
+  assert.equal(words.length, 1);
+  assert.equal(words[0].text, 'Notes');
+  assert.ok(Math.abs(words[0].x - 72) < 2 && words[0].width > 60, `spans the letters: ${JSON.stringify(words[0])}`);
 });

@@ -2,7 +2,7 @@
 // Output is deterministic: the same options always give the same bytes. The one exception is
 // encrypted files, where AES needs a fresh random IV for every string and stream.
 
-import { PDFDocument, PDFName, PDFString, StandardFonts, degrees } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFName, PDFString, StandardFonts, degrees, pushGraphicsState, popGraphicsState, concatTransformationMatrix } from '@cantoo/pdf-lib';
 
 export const FIXED_DATE = new Date('2020-01-01T00:00:00Z');
 
@@ -181,6 +181,33 @@ export async function formDocument() {
       attachments: [],
       encryption: null,
     },
+  };
+}
+
+/**
+ * A heading written one letter per text object, each under a scaled transform, the way
+ * Chromium writes some text. PDFium's own text extraction breaks such words into one letter
+ * per line.
+ *
+ * @param {string} [text]
+ * @returns {Promise<Fixture>}
+ */
+export async function splitLettersDocument(text = 'Notes') {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage(PAGE_SIZES.letter);
+  let x = 72;
+  for (const ch of text) {
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(0.75, 0, 0, 0.75, 0, 0));
+    page.drawText(ch, { x: x / 0.75, y: 700 / 0.75, size: 32, font });
+    page.pushOperators(popGraphicsState());
+    x += font.widthOfTextAtSize(ch, 24) + 0.5;
+  }
+  setMetadata(doc, DEFAULT_METADATA);
+  const bytes = await doc.save({ useObjectStreams: false });
+  return {
+    bytes,
+    truth: { pages: [{ width: 612, height: 792, rotation: 0, lines: [text] }], metadata: DEFAULT_METADATA, bookmarks: [], attachments: [], encryption: null },
   };
 }
 

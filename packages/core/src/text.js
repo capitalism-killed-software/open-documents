@@ -90,19 +90,130 @@ function unrotate(pdf, page) {
 }
 
 /**
+ * One character as PDFium found it.
+ *
+ * @typedef {object} Glyph
+ * @property {string} char
+ * @property {[number, number, number, number]} tight  left, bottom, right, top of the ink
+ * @property {number} angle  radians, anticlockwise
+ * @property {number} u      position along the text's direction
+ * @property {number} v      position across it (the baseline)
+ * @property {number} along  how far the character reaches along the direction
+ * @property {number} across how tall it is across the direction
+ */
+
+/**
+ * Lines of words.
+ *
+ * PDFium decides where words and lines break, and it understands text at any angle, so its
+ * decisions are kept, with one exception. Some generators (Chromium among them) write every
+ * letter as its own text object, and PDFium then puts a line break between letters that sit on
+ * one baseline. Such breaks are overruled: the letters join, or get a space when the gap
+ * between them is wider than about a third of a letter.
+ *
+ * @param {import('./engine/pdfium.js').Engine} pdf
+ * @param {number} textPage
+ * @returns {Glyph[][][]} lines, of words, of characters
+ */
+function layout(pdf, textPage) {
+  const { fn } = pdf;
+  const count = fn.FPDFText_CountChars(textPage);
+  const ptr = pdf.malloc(6 * 8 + 4 * 4); // four doubles for the ink box, two for the origin, four floats for the advance box
+  /** @type {Glyph[][][]} */
+  const lines = [];
+  /** @type {Glyph[][]} */
+  let line = [];
+  /** @type {Glyph[]} */
+  let word = [];
+  /** @type {'none' | 'space' | 'line' | 'hard'} */
+  let gap = 'none';
+  /** @type {Glyph | null} */
+  let last = null;
+  const endWord = () => {
+    if (word.length) line.push(word);
+    word = [];
+  };
+  const endLine = () => {
+    endWord();
+    if (line.length) lines.push(line);
+    line = [];
+  };
+  const read = (/** @type {number} */ offset, /** @type {'double' | 'float'} */ type) => pdf.wasm.getValue(ptr + offset, type);
+  try {
+    for (let i = 0; i < count; i++) {
+      const char = String.fromCodePoint(fn.FPDFText_GetUnicode(textPage, i));
+      const generated = fn.FPDFText_IsGenerated(textPage, i) === 1;
+      if (char === '\r' || char === '\n') {
+        gap = generated ? (gap === 'hard' ? 'hard' : 'line') : 'hard';
+        continue;
+      }
+      if (/\s/.test(char)) {
+        if (gap === 'none') gap = 'space';
+        continue;
+      }
+      // FPDFText_GetCharBox writes left, right, bottom, top
+      if (!fn.FPDFText_GetCharBox(textPage, i, ptr, ptr + 8, ptr + 16, ptr + 24)) continue;
+      const tight = /** @type {[number, number, number, number]} */ ([read(0, 'double'), read(16, 'double'), read(8, 'double'), read(24, 'double')]);
+      fn.FPDFText_GetCharOrigin(textPage, i, ptr + 32, ptr + 40);
+      const ox = read(32, 'double');
+      const oy = read(40, 'double');
+      // FS_RECTF is left, top, right, bottom
+      const hasLoose = fn.FPDFText_GetLooseCharBox(textPage, i, ptr + 48);
+      const w = hasLoose ? Math.abs(read(56, 'float') - read(48, 'float')) : tight[2] - tight[0];
+      const h = hasLoose ? Math.abs(read(52, 'float') - read(60, 'float')) : tight[3] - tight[1];
+      const angle = Math.max(0, fn.FPDFText_GetCharAngle(textPage, i));
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      /** @type {Glyph} */
+      const glyph = {
+        char,
+        tight,
+        angle,
+        u: ox * cos + oy * sin,
+        v: -ox * sin + oy * cos,
+        along: Math.abs(w * cos) + Math.abs(h * sin),
+        across: Math.abs(w * sin) + Math.abs(h * cos),
+      };
+      if (last) {
+        if (gap === 'line' && sameBaseline(last, glyph)) {
+          const space = glyph.u - last.u - last.along;
+          gap = space > 0.3 * Math.max(1, (last.along + glyph.along) / 2) ? 'space' : 'none';
+        }
+        if (gap === 'line' || gap === 'hard') endLine();
+        else if (gap === 'space') endWord();
+      }
+      word.push(glyph);
+      last = glyph;
+      gap = 'none';
+    }
+    endLine();
+    return lines;
+  } finally {
+    pdf.free(ptr);
+  }
+}
+
+/**
+ * Do two characters sit on one baseline, the second after the first?
+ *
+ * @param {Glyph} a
+ * @param {Glyph} b
+ */
+function sameBaseline(a, b) {
+  const turn = Math.abs(a.angle - b.angle);
+  if (Math.min(turn, 2 * Math.PI - turn) > 0.02) return false;
+  const height = Math.max(1, Math.min(a.across, b.across));
+  return Math.abs(a.v - b.v) < 0.3 * height && b.u > a.u && b.u - a.u < a.along + 2 * height;
+}
+
+/**
  * @param {import('./engine/pdfium.js').Engine} pdf
  * @param {number} textPage
  */
 function pageText(pdf, textPage) {
-  const count = pdf.fn.FPDFText_CountChars(textPage);
-  if (count <= 0) return '';
-  const ptr = pdf.malloc((count + 1) * 2);
-  try {
-    pdf.fn.FPDFText_GetText(textPage, 0, count, ptr);
-    return pdf.wasm.UTF16ToString(ptr).replace(/\r\n?/g, '\n');
-  } finally {
-    pdf.free(ptr);
-  }
+  return layout(pdf, textPage)
+    .map((line) => line.map((word) => word.map((g) => g.char).join('')).join(' '))
+    .join('\n');
 }
 
 // Device coordinates from FPDF_PageToDevice are integers, so map onto a page this many times
@@ -119,55 +230,32 @@ const PRECISION = 1000;
  */
 function pageWords(pdf, page, textPage, shown, rotation) {
   const { fn } = pdf;
-  const count = fn.FPDFText_CountChars(textPage);
   const sizeX = Math.round(shown.width * PRECISION);
   const sizeY = Math.round(shown.height * PRECISION);
-  const box = pdf.malloc(4 * 8 + 2 * 4); // four doubles, then two ints for device x, y
-  const deviceX = box + 32;
-  const deviceY = box + 36;
-
+  const ptr = pdf.malloc(8);
   /** @param {number} x  @param {number} y  @returns {[number, number]} */
   const toDevice = (x, y) => {
-    fn.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, x, y, deviceX, deviceY);
-    return [pdf.wasm.getValue(deviceX, 'i32') / PRECISION, pdf.wasm.getValue(deviceY, 'i32') / PRECISION];
+    fn.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, x, y, ptr, ptr + 4);
+    return [pdf.wasm.getValue(ptr, 'i32') / PRECISION, pdf.wasm.getValue(ptr + 4, 'i32') / PRECISION];
   };
-
-  /** @type {Word[]} */
-  const words = [];
-  let text = '';
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  const flush = () => {
-    if (text) words.push({ text, x: round(minX), y: round(minY), width: round(maxX - minX), height: round(maxY - minY) });
-    text = '';
-    minX = minY = Infinity;
-    maxX = maxY = -Infinity;
-  };
-
   try {
-    for (let i = 0; i < count; i++) {
-      const char = String.fromCodePoint(fn.FPDFText_GetUnicode(textPage, i));
-      if (/\s/.test(char) || fn.FPDFText_IsGenerated(textPage, i) === 1) {
-        flush();
-        continue;
+    return layout(pdf, textPage).flat().map((glyphs) => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const { tight: [l, b, r, t] } of glyphs) {
+        for (const [x, y] of [toDevice(l, b), toDevice(r, t)]) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
       }
-      // FPDFText_GetCharBox writes left, right, bottom, top
-      if (!fn.FPDFText_GetCharBox(textPage, i, box, box + 8, box + 16, box + 24)) continue;
-      const [left, right, bottom, top] = [0, 8, 16, 24].map((o) => pdf.wasm.getValue(box + o, 'double'));
-      for (const [px, py] of [toDevice(left, bottom), toDevice(right, top)]) {
-        minX = Math.min(minX, px);
-        maxX = Math.max(maxX, px);
-        minY = Math.min(minY, py);
-        maxY = Math.max(maxY, py);
-      }
-      text += char;
-    }
-    flush();
-    return words;
+      return { text: glyphs.map((g) => g.char).join(''), x: round(minX), y: round(minY), width: round(maxX - minX), height: round(maxY - minY) };
+    });
   } finally {
-    pdf.free(box);
+    pdf.free(ptr);
   }
 }
 
