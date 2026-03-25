@@ -258,3 +258,4 @@ function setMetadata(doc, meta) {
 }
 export { pngImage, jpegImage } from './images.js';
 export { docxDocument, docxWithLinkedImage, pptxDocument, xlsxDocument, odtDocument, rtfDocument, csvDocument, REPORT } from './office.js';
+export { emlMessage } from './email.js';
