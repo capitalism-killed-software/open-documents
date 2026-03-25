@@ -187,3 +187,18 @@ test('markdown through chromium', { skip }, async () => {
   const pdf = await chrome.htmlToPdf(markdownToHtml('# Notes\n\n- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |'));
   assert.match(await textOf(pdf), /Notes[\s\S]*one[\s\S]*two/);
 });
+
+test('an email through chromium, with its inline picture', { skip }, async () => {
+  const { emlToHtml } = await import('../src/index.js');
+  const { emlMessage } = await import('@open-documents/fixtures');
+  const page = await emlToHtml(emlMessage().bytes);
+  const pdf = await chrome.htmlToPdf(page.html, { assets: page.assets });
+  const text = await textOf(pdf);
+  assert.match(text, /Site visit on Tuesday/);
+  assert.match(text, /The visit is confirmed for Tuesday at 10\./);
+  assert.doesNotMatch(text, /replaced/);
+  const img = await renderPage(pdf, { dpi: 72, format: 'rgba' });
+  let red = 0;
+  for (let i = 0; i < img.data.length; i += 4) if (img.data[i] > 200 && img.data[i + 1] < 60 && img.data[i + 2] < 60) red++;
+  assert.ok(red > 500, 'the inline picture is drawn');
+});
