@@ -89,3 +89,38 @@ export function jpegImage({ width = 40, height = 20, fill, orientation, quality 
   ]);
   return new Uint8Array(Buffer.concat([encoded.subarray(0, 2), exif, encoded.subarray(2)]));
 }
+
+/**
+ * An uncompressed RGB TIFF, the format scanners often write.
+ *
+ * @param {{ width?: number, height?: number, fill?: Fill }} [options]
+ * @returns {Uint8Array}
+ */
+export function tiffImage({ width = 40, height = 20, fill } = {}) {
+  const rgba = pixels(width, height, fill);
+  const rgb = Buffer.alloc(width * height * 3);
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) rgb.set(rgba.subarray(i, i + 3), j);
+  const entries = [
+    [256, 4, 1, width], [257, 4, 1, height], [258, 3, 3, 158], [259, 3, 1, 1], [262, 3, 1, 2], [273, 4, 1, 180],
+    [277, 3, 1, 3], [278, 4, 1, height], [279, 4, 1, rgb.length], [282, 5, 1, 164], [283, 5, 1, 172], [296, 3, 1, 2],
+  ];
+  const head = Buffer.alloc(180);
+  head.write('II', 0, 'latin1');
+  head.writeUInt16LE(42, 2);
+  head.writeUInt32LE(8, 4);
+  head.writeUInt16LE(entries.length, 8);
+  entries.forEach(([tag, type, count, value], i) => {
+    const at = 10 + i * 12;
+    head.writeUInt16LE(tag, at);
+    head.writeUInt16LE(type, at + 2);
+    head.writeUInt32LE(count, at + 4);
+    if (type === 3 && count === 1) head.writeUInt16LE(value, at + 8);
+    else head.writeUInt32LE(value, at + 8);
+  });
+  [8, 8, 8].forEach((bits, i) => head.writeUInt16LE(bits, 158 + i * 2));
+  for (const at of [164, 172]) {
+    head.writeUInt32LE(72, at);
+    head.writeUInt32LE(1, at + 4);
+  }
+  return new Uint8Array(Buffer.concat([head, rgb]));
+}

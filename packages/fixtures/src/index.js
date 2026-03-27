@@ -256,6 +256,6 @@ function setMetadata(doc, meta) {
   doc.setCreationDate(FIXED_DATE);
   doc.setModificationDate(FIXED_DATE);
 }
-export { pngImage, jpegImage } from './images.js';
+export { pngImage, jpegImage, tiffImage } from './images.js';
 export { docxDocument, docxWithLinkedImage, pptxDocument, xlsxDocument, odtDocument, rtfDocument, csvDocument, REPORT } from './office.js';
 export { emlMessage } from './email.js';
