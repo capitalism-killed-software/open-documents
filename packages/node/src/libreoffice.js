@@ -16,6 +16,8 @@ export const OFFICE_KINDS = {
   docx: 'docx', doc: 'doc', odt: 'odt', rtf: 'rtf', text: 'txt',
   xlsx: 'xlsx', xls: 'xls', ods: 'ods', csv: 'csv',
   pptx: 'pptx', ppt: 'ppt', odp: 'odp', odg: 'odg',
+  // images LibreOffice opens in Draw, one page each
+  gif: 'gif', tiff: 'tiff', webp: 'webp', bmp: 'bmp',
 };
 
 const CANDIDATES = [
