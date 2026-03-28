@@ -2,8 +2,14 @@ import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
 import * as od from '@open-documents/core';
+import { createConverter } from '@open-documents/node';
 
 const USAGE = `opendocs: inspect, render and change PDF files
+
+Convert to PDF (Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
+email, JPEG, PNG, TIFF; needs LibreOffice for office files and Chromium for web pages):
+  opendocs convert <file> [-o out.pdf] [--paper letter|a4|legal|a3|a5] [--landscape] [--javascript]
+  opendocs convert --url https://example.com -o page.pdf [--allow-host intranet.local]
 
 Look:
   opendocs info <file.pdf> [--json]
@@ -94,6 +100,11 @@ const OPTIONS = {
   'no-annotate': { type: 'boolean' },
   'page-size': { type: 'string' },
   margin: { type: 'string' },
+  url: { type: 'string' },
+  'allow-host': { type: 'string', multiple: true },
+  paper: { type: 'string' },
+  landscape: { type: 'boolean' },
+  javascript: { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -105,8 +116,9 @@ const OPTIONS = {
  * @property {string} command
  */
 
-/** @type {Record<string, { files: 'one' | 'many', run: (ctx: Context) => Promise<void> }>} */
+/** @type {Record<string, { files: 'one' | 'many' | 'convert', run: (ctx: Context) => Promise<void> }>} */
 const COMMANDS = {
+  convert: { files: 'convert', run: convert },
   info: { files: 'one', run: info },
   text: { files: 'one', run: text },
   render: { files: 'one', run: render },
@@ -233,7 +245,12 @@ export async function main(argv, io) {
     io.err(`Unknown command "${command}".\n\n${USAGE}`);
     return 2;
   }
-  if (files.length === 0 || (spec.files === 'one' && files.length > 1) || (command === 'merge' && files.length < 2)) {
+  if (spec.files === 'convert') {
+    if ((files.length === 1) === Boolean(values.url) || files.length > 1) {
+      io.err('opendocs convert needs one file, or --url and no file.\n');
+      return 2;
+    }
+  } else if (files.length === 0 || (spec.files === 'one' && files.length > 1) || (command === 'merge' && files.length < 2)) {
     io.err(
       command === 'merge' ? 'opendocs merge needs two or more PDF files.\n'
         : command === 'images' ? 'opendocs images needs one or more JPEG or PNG files.\n'
@@ -349,6 +366,28 @@ async function split({ files, values, io }) {
     const target = join(folder, `${stem(files[0])}-${String(i + 1).padStart(digits, '0')}.pdf`);
     await writeFile(target, part);
     await report(io, target, part);
+  }
+}
+
+/** @param {Context} ctx */
+async function convert({ files, values, io }) {
+  const converter = createConverter();
+  try {
+    const layout = { format: values.paper, landscape: values.landscape };
+    if (values.url) {
+      const target = values.output ?? 'page.pdf';
+      const out = await converter.urlToPdf(values.url, { ...layout, allowHosts: values['allow-host'], javascript: values.javascript ?? true });
+      await writeFile(target, out);
+      await report(io, target, out);
+      return;
+    }
+    const target = values.output ?? `${stem(files[0])}.pdf`;
+    refuseOverwrite(target, files);
+    const out = await converter.toPdf(await readFile(files[0]), { ...layout, filename: basename(files[0]), javascript: values.javascript });
+    await writeFile(target, out);
+    await report(io, target, out);
+  } finally {
+    await converter.close();
   }
 }
 

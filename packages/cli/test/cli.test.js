@@ -220,3 +220,22 @@ test('edit commands explain what they need', async () => {
   assert.match((await run(['numbers', pdf, '--size', 'big'])).err, /--size must be a number/);
   assert.match((await run(['numbers', pdf, '--start', 'one'])).err, /--start must be a whole number/);
 });
+
+test('convert turns images into pdfs, and explains what it needs', async () => {
+  const o = (/** @type {string} */ name) => join(dir, name);
+  await writeFile(o('photo.png'), pngImage({ width: 100, height: 50 }));
+  const { code, out } = await run(['convert', o('photo.png'), '-o', o('photo.pdf')]);
+  assert.equal(code, 0);
+  assert.match(out, /photo\.pdf {2}1 page/);
+  assert.match((await run(['convert'])).err, /one file, or --url/);
+  assert.match((await run(['convert', o('photo.png'), '--url', 'https://example.com'])).err, /one file, or --url/);
+  assert.match((await run(['convert', pdf, '-o', pdf])).err, /Not writing over/);
+  await writeFile(o('mystery.bin'), new Uint8Array([0, 1, 2, 0]));
+  assert.match((await run(['convert', o('mystery.bin')])).err, /not recognised/);
+});
+
+test('convert --url refuses private addresses', async () => {
+  const { code, err } = await run(['convert', '--url', 'http://127.0.0.1/', '-o', join(dir, 'u.pdf')]);
+  assert.equal(code, 1);
+  assert.match(err, /error: (Not allowed to reach 127\.0\.0\.1|Chromium is not installed)/);
+});
