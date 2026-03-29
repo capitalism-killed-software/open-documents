@@ -11,7 +11,7 @@ export default [
       globals: { ...globals.node, ...globals.browser },
     },
     rules: {
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }],
       eqeqeq: ['error', 'smart'],
       'prefer-const': 'error',
     },

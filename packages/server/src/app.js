@@ -1,0 +1,168 @@
+// The HTTP API. Every endpoint takes files as multipart form data and its settings as a JSON
+// `options` field, and answers with a PDF, a zip, a PNG or JSON. Errors are JSON:
+// { "error": { "code": "...", "message": "..." } }.
+import Fastify from 'fastify';
+import multipart from '@fastify/multipart';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { OpenDocumentsError } from '@open-documents/core';
+import { createConverter } from '@open-documents/node';
+import { OPERATIONS } from './operations.js';
+
+const STATUS = {
+  INVALID_INPUT: 400,
+  INVALID_OPTION: 400,
+  PAGE_NOT_FOUND: 400,
+  PASSWORD_REQUIRED: 422,
+  UNSUPPORTED_SECURITY: 422,
+  DAMAGED_FILE: 422,
+  CONVERSION_FAILED: 422,
+  BLOCKED: 403,
+  BUSY: 503,
+  TIMEOUT: 504,
+  ENGINE_MISSING: 501,
+  ENGINE_ERROR: 500,
+};
+
+/**
+ * @typedef {object} ServerOptions
+ * @property {string[]} [apiKeys]       when set, every /v1 request needs `Authorization: Bearer <key>`
+ * @property {number} [maxFileSize]     bytes per uploaded file; default 50 MB
+ * @property {number} [maxFiles]        files per request; default 50
+ * @property {boolean} [allowUrl]       allow /v1/convert/url; default false
+ * @property {string[]} [allowHosts]    private hosts web pages may reach (server setting only)
+ * @property {ReturnType<typeof createConverter>} [converter]
+ * @property {boolean | object} [logger]
+ */
+
+/**
+ * @param {ServerOptions} [options]
+ */
+export async function buildServer(options = {}) {
+  const maxFileSize = options.maxFileSize ?? 50 * 1024 * 1024;
+  const converter = options.converter ?? createConverter();
+  const keys = (options.apiKeys ?? []).filter(Boolean).map((k) => createHash('sha256').update(k).digest());
+
+  const app = Fastify({ logger: options.logger ?? false, bodyLimit: Math.min(maxFileSize, 20 * 1024 * 1024) });
+  await app.register(multipart, { limits: { fileSize: maxFileSize, files: options.maxFiles ?? 50, fields: 20, fieldSize: 1024 * 1024 } });
+
+  app.addHook('onRequest', async (req, reply) => {
+    if (!keys.length || !req.url.startsWith('/v1/')) return;
+    const given = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+    const hash = given ? createHash('sha256').update(given).digest() : null;
+    if (!hash || !keys.some((k) => timingSafeEqual(k, hash))) {
+      reply.code(401).header('www-authenticate', 'Bearer').send({ error: { code: 'UNAUTHORIZED', message: 'A valid API key is needed: Authorization: Bearer <key>.' } });
+    }
+  });
+
+  app.setErrorHandler((err, req, reply) => {
+    if (err instanceof OpenDocumentsError) {
+      const status = STATUS[/** @type {keyof STATUS} */ (err.code)] ?? 500;
+      return reply.code(status).send({ error: { code: err.code, message: err.message } });
+    }
+    const e = /** @type {any} */ (err);
+    if (e.code === 'FST_REQ_FILE_TOO_LARGE' || e.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+      return reply.code(413).send({ error: { code: 'TOO_LARGE', message: `Files may be at most ${Math.round(maxFileSize / 1048576)} MB.` } });
+    }
+    if (e.code === 'FST_FILES_LIMIT' || e.code === 'FST_PARTS_LIMIT' || e.code === 'FST_FIELDS_LIMIT') {
+      return reply.code(413).send({ error: { code: 'TOO_MANY_FILES', message: 'Too many files or fields in one request.' } });
+    }
+    if (e.statusCode && e.statusCode < 500) return reply.code(e.statusCode).send({ error: { code: 'BAD_REQUEST', message: e.message } });
+    req.log.error(err);
+    return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Something went wrong on the server.' } });
+  });
+
+  app.addHook('onClose', async () => {
+    if (!options.converter) await converter.close();
+  });
+
+  app.get('/health', async () => ({ ok: true }));
+
+  app.get('/v1/operations', async () => ({
+    pdf: Object.keys(OPERATIONS),
+    convert: ['file', 'html', 'markdown', ...(options.allowUrl ? ['url'] : [])],
+  }));
+
+  app.post('/v1/pdf/:operation', async (req, reply) => {
+    const name = /** @type {{ operation: string }} */ (req.params).operation;
+    const op = OPERATIONS[name];
+    if (!op) throw new OpenDocumentsError('INVALID_OPTION', `There is no operation "${name}". GET /v1/operations lists them.`);
+    const { files, options: opts } = await readForm(req);
+    if (!files.length) throw new OpenDocumentsError('INVALID_INPUT', 'Upload the file as multipart form data.');
+    if (op.files === 'one' && files.length > 1) throw new OpenDocumentsError('INVALID_INPUT', `${name} takes one file.`);
+    return send(reply, await op.run(files.map((f) => f.data), opts));
+  });
+
+  app.post('/v1/convert', async (req, reply) => {
+    const { files, options: opts } = await readForm(req);
+    if (files.length !== 1) throw new OpenDocumentsError('INVALID_INPUT', 'Upload one file to convert.');
+    const { allowHosts: _a, ports: _p, ...safe } = opts;
+    return send(reply, { type: 'application/pdf', body: await converter.toPdf(files[0].data, { ...safe, filename: files[0].filename }) });
+  });
+
+  app.post('/v1/convert/html', async (req, reply) => {
+    if (req.isMultipart()) {
+      // index.html plus the files it refers to, by their paths
+      const { files, options: opts } = await readForm(req);
+      const index = files.find((f) => f.filename === 'index.html');
+      if (!index) throw new OpenDocumentsError('INVALID_INPUT', 'Upload index.html, with any files it uses next to it.');
+      const assets = Object.fromEntries(files.filter((f) => f !== index).map((f) => [f.filename, f.data]));
+      return send(reply, { type: 'application/pdf', body: await converter.htmlToPdf(new TextDecoder().decode(index.data), { ...opts, assets }) });
+    }
+    const { html, options: opts = {} } = /** @type {any} */ (req.body ?? {});
+    if (typeof html !== 'string') throw new OpenDocumentsError('INVALID_INPUT', 'Send { "html": "..." } as JSON, or index.html as multipart form data.');
+    return send(reply, { type: 'application/pdf', body: await converter.htmlToPdf(html, opts) });
+  });
+
+  app.post('/v1/convert/markdown', async (req, reply) => {
+    const { markdown, options: opts = {} } = /** @type {any} */ (req.body ?? {});
+    if (typeof markdown !== 'string') throw new OpenDocumentsError('INVALID_INPUT', 'Send { "markdown": "..." } as JSON.');
+    return send(reply, { type: 'application/pdf', body: await converter.markdownToPdf(markdown, opts) });
+  });
+
+  app.post('/v1/convert/url', async (req, reply) => {
+    if (!options.allowUrl) {
+      return reply.code(403).send({ error: { code: 'URL_DISABLED', message: 'Web page conversion is turned off on this server (OPENDOCS_ALLOW_URL).' } });
+    }
+    const { url, options: opts = {} } = /** @type {any} */ (req.body ?? {});
+    // which private hosts are reachable is the server's decision, never the caller's
+    const { allowHosts: _a, ports: _p, ...safe } = opts;
+    return send(reply, { type: 'application/pdf', body: await converter.urlToPdf(url, { ...safe, allowHosts: options.allowHosts }) });
+  });
+
+  return app;
+}
+
+/**
+ * @param {import('fastify').FastifyRequest} req
+ * @returns {Promise<{ files: { filename: string, data: Uint8Array }[], options: Record<string, any> }>}
+ */
+async function readForm(req) {
+  if (!req.isMultipart()) throw new OpenDocumentsError('INVALID_INPUT', 'Send multipart form data: the file, and settings as a JSON "options" field.');
+  /** @type {{ filename: string, data: Uint8Array }[]} */
+  const files = [];
+  /** @type {Record<string, any>} */
+  let options = {};
+  for await (const part of req.parts()) {
+    if (part.type === 'file') {
+      files.push({ filename: part.filename, data: new Uint8Array(await part.toBuffer()) });
+    } else if (part.fieldname === 'options') {
+      try {
+        options = JSON.parse(String(part.value));
+      } catch {
+        throw new OpenDocumentsError('INVALID_OPTION', 'The options field must be JSON.');
+      }
+      if (!options || typeof options !== 'object' || Array.isArray(options)) throw new OpenDocumentsError('INVALID_OPTION', 'The options field must be a JSON object.');
+    }
+  }
+  return { files, options };
+}
+
+/**
+ * @param {import('fastify').FastifyReply} reply
+ * @param {import('./operations.js').Reply} result
+ */
+function send(reply, result) {
+  reply.type(result.type);
+  if (result.type === 'application/json') return reply.send(result.body);
+  return reply.send(Buffer.from(/** @type {Uint8Array} */ (result.body)));
+}
