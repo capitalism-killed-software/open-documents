@@ -7,6 +7,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { OpenDocumentsError } from '@open-documents/core';
 import { createConverter } from '@open-documents/node';
 import { OPERATIONS } from './operations.js';
+import { createJobs } from './jobs.js';
+import { checkWebhook, deliver } from './webhooks.js';
 
 const STATUS = {
   INVALID_INPUT: 400,
@@ -30,6 +32,9 @@ const STATUS = {
  * @property {number} [maxFiles]        files per request; default 50
  * @property {boolean} [allowUrl]       allow /v1/convert/url; default false
  * @property {string[]} [allowHosts]    private hosts web pages may reach (server setting only)
+ * @property {string} [webhookSecret]  signs webhooks; webhooks are refused without it
+ * @property {number[]} [webhookDelays]  retry delays in milliseconds
+ * @property {{ ttl?: number, concurrency?: number, maxJobs?: number }} [jobs]
  * @property {ReturnType<typeof createConverter>} [converter]
  * @property {boolean | object} [logger]
  */
@@ -43,6 +48,18 @@ export async function buildServer(options = {}) {
   const keys = (options.apiKeys ?? []).filter(Boolean).map((k) => createHash('sha256').update(k).digest());
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: Math.min(maxFileSize, 20 * 1024 * 1024) });
+  app.decorateRequest('owner', 'anonymous');
+  /** @type {Map<string, string>} */
+  const resultLinks = new Map();
+  const webhookOptions = { secret: options.webhookSecret ?? '', allowHosts: options.allowHosts, delays: options.webhookDelays };
+  const jobs = createJobs({
+    ...options.jobs,
+    onDone: (job) => {
+      const link = resultLinks.get(job.id);
+      resultLinks.delete(job.id);
+      if (job.webhook && link) deliver(job, link, webhookOptions).catch(() => {});
+    },
+  });
   await app.register(multipart, { limits: { fileSize: maxFileSize, files: options.maxFiles ?? 50, fields: 20, fieldSize: 1024 * 1024 } });
 
   app.addHook('onRequest', async (req, reply) => {
@@ -50,9 +67,33 @@ export async function buildServer(options = {}) {
     const given = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
     const hash = given ? createHash('sha256').update(given).digest() : null;
     if (!hash || !keys.some((k) => timingSafeEqual(k, hash))) {
-      reply.code(401).header('www-authenticate', 'Bearer').send({ error: { code: 'UNAUTHORIZED', message: 'A valid API key is needed: Authorization: Bearer <key>.' } });
+      return reply.code(401).header('www-authenticate', 'Bearer').send({ error: { code: 'UNAUTHORIZED', message: 'A valid API key is needed: Authorization: Bearer <key>.' } });
     }
+    // jobs belong to the key that made them
+    /** @type {any} */ (req).owner = hash.toString('hex');
   });
+
+  /**
+   * Run the work now, or as a job when the caller asked for one (Prefer: respond-async) or gave
+   * a webhook.
+   *
+   * @param {import('fastify').FastifyRequest} req
+   * @param {import('fastify').FastifyReply} reply
+   * @param {() => Promise<import('./operations.js').Reply>} work
+   * @param {unknown} webhook
+   */
+  const respond = async (req, reply, work, webhook) => {
+    const later = /\brespond-async\b/i.test(String(req.headers.prefer ?? '')) || webhook !== undefined;
+    if (!later) return send(reply, await work());
+    if (webhook !== undefined) {
+      if (!options.webhookSecret) throw new OpenDocumentsError('INVALID_OPTION', 'Webhooks are turned off on this server (OPENDOCS_WEBHOOK_SECRET is not set).');
+      await checkWebhook(/** @type {string} */ (webhook), webhookOptions);
+    }
+    const job = jobs.submit(work, { owner: /** @type {any} */ (req).owner, webhook: /** @type {string | undefined} */ (webhook) });
+    const base = `${req.protocol}://${req.headers.host ?? 'localhost'}`;
+    resultLinks.set(job.id, `${base}/v1/jobs/${job.id}/result`);
+    return reply.code(202).header('location', `/v1/jobs/${job.id}`).send(view(job));
+  };
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof OpenDocumentsError) {
@@ -72,7 +113,27 @@ export async function buildServer(options = {}) {
   });
 
   app.addHook('onClose', async () => {
+    jobs.close();
     if (!options.converter) await converter.close();
+  });
+
+  app.get('/v1/jobs/:id', async (req, reply) => {
+    const entry = jobs.get(/** @type {any} */ (req.params).id, /** @type {any} */ (req).owner);
+    if (!entry) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'No such job. Jobs expire an hour after they finish.' } });
+    return view(entry.job);
+  });
+
+  app.get('/v1/jobs/:id/result', async (req, reply) => {
+    const entry = jobs.get(/** @type {any} */ (req.params).id, /** @type {any} */ (req).owner);
+    if (!entry) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'No such job. Jobs expire an hour after they finish.' } });
+    const { job, result } = entry;
+    if (job.status === 'failed' && job.error) {
+      return reply.code(STATUS[/** @type {keyof STATUS} */ (job.error.code)] ?? 500).send({ error: job.error });
+    }
+    if (job.status !== 'done' || !result) {
+      return reply.code(409).header('retry-after', '1').send({ error: { code: 'NOT_READY', message: `The job is ${job.status}.` } });
+    }
+    return send(reply, result);
   });
 
   app.get('/health', async () => ({ ok: true }));
@@ -86,37 +147,37 @@ export async function buildServer(options = {}) {
     const name = /** @type {{ operation: string }} */ (req.params).operation;
     const op = OPERATIONS[name];
     if (!op) throw new OpenDocumentsError('INVALID_OPTION', `There is no operation "${name}". GET /v1/operations lists them.`);
-    const { files, options: opts } = await readForm(req);
+    const { files, options: { webhook, ...opts } } = await readForm(req);
     if (!files.length) throw new OpenDocumentsError('INVALID_INPUT', 'Upload the file as multipart form data.');
     if (op.files === 'one' && files.length > 1) throw new OpenDocumentsError('INVALID_INPUT', `${name} takes one file.`);
-    return send(reply, await op.run(files.map((f) => f.data), opts));
+    return respond(req, reply, () => op.run(files.map((f) => f.data), opts), webhook);
   });
 
   app.post('/v1/convert', async (req, reply) => {
     const { files, options: opts } = await readForm(req);
     if (files.length !== 1) throw new OpenDocumentsError('INVALID_INPUT', 'Upload one file to convert.');
-    const { allowHosts: _a, ports: _p, ...safe } = opts;
-    return send(reply, { type: 'application/pdf', body: await converter.toPdf(files[0].data, { ...safe, filename: files[0].filename }) });
+    const { allowHosts: _a, ports: _p, webhook, ...safe } = opts;
+    return respond(req, reply, async () => ({ type: 'application/pdf', body: await converter.toPdf(files[0].data, { ...safe, filename: files[0].filename }) }), webhook);
   });
 
   app.post('/v1/convert/html', async (req, reply) => {
     if (req.isMultipart()) {
       // index.html plus the files it refers to, by their paths
-      const { files, options: opts } = await readForm(req);
+      const { files, options: { webhook, ...opts } } = await readForm(req);
       const index = files.find((f) => f.filename === 'index.html');
       if (!index) throw new OpenDocumentsError('INVALID_INPUT', 'Upload index.html, with any files it uses next to it.');
       const assets = Object.fromEntries(files.filter((f) => f !== index).map((f) => [f.filename, f.data]));
-      return send(reply, { type: 'application/pdf', body: await converter.htmlToPdf(new TextDecoder().decode(index.data), { ...opts, assets }) });
+      return respond(req, reply, async () => ({ type: 'application/pdf', body: await converter.htmlToPdf(new TextDecoder().decode(index.data), { ...opts, assets }) }), webhook);
     }
-    const { html, options: opts = {} } = /** @type {any} */ (req.body ?? {});
+    const { html, options: { webhook, ...opts } = {} } = /** @type {any} */ (req.body ?? {});
     if (typeof html !== 'string') throw new OpenDocumentsError('INVALID_INPUT', 'Send { "html": "..." } as JSON, or index.html as multipart form data.');
-    return send(reply, { type: 'application/pdf', body: await converter.htmlToPdf(html, opts) });
+    return respond(req, reply, async () => ({ type: 'application/pdf', body: await converter.htmlToPdf(html, opts) }), webhook);
   });
 
   app.post('/v1/convert/markdown', async (req, reply) => {
-    const { markdown, options: opts = {} } = /** @type {any} */ (req.body ?? {});
+    const { markdown, options: { webhook, ...opts } = {} } = /** @type {any} */ (req.body ?? {});
     if (typeof markdown !== 'string') throw new OpenDocumentsError('INVALID_INPUT', 'Send { "markdown": "..." } as JSON.');
-    return send(reply, { type: 'application/pdf', body: await converter.markdownToPdf(markdown, opts) });
+    return respond(req, reply, async () => ({ type: 'application/pdf', body: await converter.markdownToPdf(markdown, opts) }), webhook);
   });
 
   app.post('/v1/convert/url', async (req, reply) => {
@@ -125,8 +186,8 @@ export async function buildServer(options = {}) {
     }
     const { url, options: opts = {} } = /** @type {any} */ (req.body ?? {});
     // which private hosts are reachable is the server's decision, never the caller's
-    const { allowHosts: _a, ports: _p, ...safe } = opts;
-    return send(reply, { type: 'application/pdf', body: await converter.urlToPdf(url, { ...safe, allowHosts: options.allowHosts }) });
+    const { allowHosts: _a, ports: _p, webhook, ...safe } = opts;
+    return respond(req, reply, async () => ({ type: 'application/pdf', body: await converter.urlToPdf(url, { ...safe, allowHosts: options.allowHosts }) }), webhook);
   });
 
   return app;
@@ -155,6 +216,19 @@ async function readForm(req) {
     }
   }
   return { files, options };
+}
+
+/** @param {import('./jobs.js').Job} job */
+function view(job) {
+  return {
+    id: job.id,
+    status: job.status,
+    created: job.created,
+    finished: job.finished,
+    error: job.error,
+    webhook: job.webhook && { status: job.webhook.status, attempts: job.webhook.attempts },
+    links: { self: `/v1/jobs/${job.id}`, result: `/v1/jobs/${job.id}/result` },
+  };
 }
 
 /**

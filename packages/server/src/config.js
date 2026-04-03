@@ -32,6 +32,7 @@ export function configFromEnv(env) {
       maxFileSize: Math.round(mb * 1024 * 1024),
       allowUrl: env.OPENDOCS_ALLOW_URL === '1',
       allowHosts: (env.OPENDOCS_ALLOW_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
+      webhookSecret: env.OPENDOCS_WEBHOOK_SECRET || undefined,
       logger: env.OPENDOCS_LOG === '0' ? false : { level: env.OPENDOCS_LOG ?? 'info' },
     },
   };
