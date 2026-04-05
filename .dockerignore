@@ -1,0 +1,10 @@
+**/node_modules
+**/coverage
+**/dist
+.git
+.github
+docs
+examples/browser/*.js
+examples/browser/*.html
+tools/test
+*.log
