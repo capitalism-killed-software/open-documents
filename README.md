@@ -10,7 +10,7 @@ many companies cannot ship. Open Documents is built only from permissively licen
 you can embed it in a closed-source product. Apache-2.0, checked on every change
 (see [docs/licensing.md](docs/licensing.md)).
 
-**Early.** The JavaScript library and the command line work today, in Node and in browsers.
+**Early.** The JavaScript library, the command line and the self-hosted server work today.
 Nothing is on npm yet.
 
 ## What works
@@ -34,7 +34,9 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, metadata,
   bookmarks
 - **Security:** AES-256 encryption with permissions, and removing it
-- **Convert:** JPEG and PNG images to PDF, turned the right way up
+- **Convert to PDF:** Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
+  email, web pages, JPEG, PNG, TIFF and other images (office files need LibreOffice, web pages
+  need Chromium)
 
 Input is a `Uint8Array`, `ArrayBuffer` or `Blob`, and every function returns new bytes.
 See [docs/api.md](docs/api.md) for every option.
@@ -49,9 +51,28 @@ opendocs watermark both.pdf --text DRAFT
 opendocs numbers both.pdf --format "Page {n} of {total}"
 opendocs encrypt both.pdf --user-password open --no-copy
 opendocs render both.pdf --page 2 --dpi 150 -o page2.png
+opendocs convert report.docx                 # needs LibreOffice
+opendocs convert --url https://example.com -o page.pdf
 ```
 
 Run `opendocs --help` for the rest.
+
+## The server
+
+A REST API with the same operations, plus conversions, async jobs and signed webhooks. Run it
+from the Docker image, which includes LibreOffice, Chromium and the fonts Office documents
+expect:
+
+```sh
+docker build -f docker/Dockerfile -t open-documents .
+docker run --rm -p 3000:3000 -e OPENDOCS_API_KEYS="$(openssl rand -hex 24)" \
+  --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges open-documents
+
+curl -H "Authorization: Bearer $KEY" -F file=@report.docx http://localhost:3000/v1/convert -o report.pdf
+```
+
+See [docs/server.md](docs/server.md). `@open-documents/client` calls it from JavaScript with the
+same function names as the library.
 
 In the browser the engine runs on the page, so files never leave the computer: see
 [examples/browser](examples/browser).
@@ -59,12 +80,11 @@ In the browser the engine runs on the page, so files never leave the computer: s
 ## Planned
 
 - **Edit:** images, links, existing text
-- **To PDF:** Word, Excel, PowerPoint, OpenDocument, HTML and web pages, Markdown, images, email
+- **To PDF:** Outlook `.msg`, EPUB
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
 - **More:** annotations, forms, OCR, compare, compress, PDF/A, true redaction, digital
   signatures, fonts beyond Latin
-- **Ways to use it:** a self-hosted API in Docker, and a viewer and editor component that
-  works in any front-end framework
+- **Ways to use it:** a viewer and editor component that works in any front-end framework
 
 ## Develop
 

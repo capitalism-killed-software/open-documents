@@ -37,6 +37,17 @@ this library, so they are out:
 
 The deny list is in `tools/licence-policy.json`, with a reason next to each entry.
 
+## The Docker image
+
+The image is a collection of separate programs: our server (Apache-2.0), Node.js, LibreOffice
+(MPL-2.0), Chromium (BSD and others) and Debian's packages, each under its own licence. Our
+code calls LibreOffice and Chromium as separate programs and links to neither.
+
+Debian builds LibreOffice against Poppler (GPL) for LibreOffice's own PDF import, so
+`libpoppler` is in the image as a dependency of LibreOffice. Our code never uses it: PDFs are
+read and changed by PDFium. The smoke test refuses the packages we must never ship, such as
+Ghostscript, MuPDF, ImageMagick and poppler-utils, and reports libpoppler so it stays visible.
+
 ## Adding a dependency
 
 1. Check its licence and the licences of what it pulls in (`npm ls --all`).

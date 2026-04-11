@@ -5,14 +5,14 @@
 | Package | Runs in | What it does |
 |---|---|---|
 | `@open-documents/core` | browser and Node | Read, render and change PDFs. No Node-only imports outside `src/platform/node.js`. |
-| `@open-documents/cli` | Node | The `opendocs` command, a thin layer over core. |
-| `@open-documents/fixtures` | tests only | Generated PDFs with known contents. No real documents, ever. |
+| `@open-documents/node` | Node | Conversions that need other programs: LibreOffice for office files, Chromium for HTML, Markdown, email and web pages, with the egress proxy and file-type checks. |
+| `@open-documents/server` | Node | The REST API (Fastify): operations, conversions, jobs, webhooks, API keys. `docker/` builds its image. |
+| `@open-documents/client` | browser and Node | Calls the API with the same function names as core. |
+| `@open-documents/cli` | Node | The `opendocs` command, a thin layer over core and node. |
+| `@open-documents/fixtures` | tests only | Generated PDFs, Office files, images and email with known contents. No real documents, ever. |
 
-Planned: `@open-documents/node` (process pools for LibreOffice, Chromium and other tools),
-`@open-documents/server` (self-hosted REST API and Docker image), `@open-documents/client`
-(calls the API with the same function names as core), `@open-documents/viewer` (an embeddable
-viewer and editor as Web Components), and a Python worker for the conversions that only exist
-in Python.
+Planned: `@open-documents/viewer` (an embeddable viewer and editor as Web Components), and a
+Python worker for PDF to Word, Excel and Markdown, and for OCR.
 
 ## Engines
 
@@ -41,9 +41,30 @@ Every error thrown on purpose is an `OpenDocumentsError` with a stable `code`
 (`INVALID_INPUT`, `INVALID_OPTION`, `PASSWORD_REQUIRED`, `UNSUPPORTED_SECURITY`,
 `DAMAGED_FILE`, `PAGE_NOT_FOUND`, `ENGINE_ERROR`). Branch on the code, not the message.
 
+## Converters
+
+`createConverter()` works out what a file is from its bytes (`sniff`) and sends it on:
+
+- PDF: returned as it is.
+- JPEG and PNG: core's `imagesToPdf`, no other program needed.
+- Office files, CSV, text, TIFF, GIF, WebP, BMP: LibreOffice, headless. A small pool of slots,
+  each with its own locked-down profile; one document per slot at a time.
+- HTML, Markdown, email: Chromium with the network off. Markdown becomes HTML with a print
+  style; email becomes a page with its headers on top and its inline pictures served from the
+  message.
+- Web pages: Chromium through the egress proxy.
+
+LibreOffice and Chromium start the first time they are needed.
+
 ## Untrusted files
 
-Treat every input as hostile. Today: header check, a pixel cap on renders, page numbers
-checked before use, and all engine memory freed in `finally` blocks. The server will add size
-and page caps, timeouts, separate sandboxed processes for external tools, and no network access
-for them.
+Treat every input as hostile:
+
+- type checks from the bytes, and zip directories checked before anything is unpacked;
+- caps on file size, file count, render size and run time;
+- every external program in its own process group, killed with everything it started when it
+  runs too long, and given a minimal environment;
+- no network for uploaded HTML; private addresses refused for web pages and webhooks;
+- all engine memory freed in `finally` blocks.
+
+Planned: each converter in its own sandbox (nsjail) inside the image.
