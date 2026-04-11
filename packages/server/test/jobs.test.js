@@ -110,7 +110,12 @@ test('webhooks are signed, and retried until they get through', async () => {
     assert.match(payload.result, new RegExp(`/v1/jobs/${job.id}/result$`));
     const [, t, mac] = /** @type {RegExpExecArray} */ (/^t=(\d+),v1=([0-9a-f]{64})$/.exec(calls[1].signature));
     assert.equal(mac, createHmac('sha256', secret).update(`${t}.${calls[1].body}`).digest('hex'));
-    const view = (await app.inject(job.links.self)).json();
+    // the receiver has answered; the job records it a moment later
+    let view = (await app.inject(job.links.self)).json();
+    for (let i = 0; i < 100 && view.webhook.status === 'pending'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      view = (await app.inject(job.links.self)).json();
+    }
     assert.deepEqual(view.webhook, { status: 'delivered', attempts: 2 });
   } finally {
     await app.close();
