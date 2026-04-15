@@ -1,0 +1,12 @@
+{
+  "about": "Programs fetched for local development by tools/fetch-binaries.js. CI and the Docker image install them from the system's packages instead.",
+  "qpdf": {
+    "version": "12.3.2",
+    "licence": "Apache-2.0",
+    "linux-x64": {
+      "url": "https://github.com/qpdf/qpdf/releases/download/v12.3.2/qpdf-12.3.2-bin-linux-x86_64.zip",
+      "sha256": "44f2c53bf784c0143128d80d2b9946e9793962c5bb403b75c0024cb4d8e346b9",
+      "bin": "bin/qpdf"
+    }
+  }
+}
