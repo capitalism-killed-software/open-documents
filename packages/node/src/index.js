@@ -6,3 +6,4 @@ export { createEgressProxy, isPublicAddress } from './egress.js';
 export { markdownToHtml } from './markdown.js';
 export { emlToHtml } from './email.js';
 export { createConverter } from './convert.js';
+export { createQpdf, findQpdf } from './qpdf.js';

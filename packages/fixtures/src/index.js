@@ -212,6 +212,24 @@ export async function splitLettersDocument(text = 'Notes') {
 }
 
 /**
+ * A text document whose cross-reference table points at the wrong places, the most common
+ * kind of damage in files that were cut short or edited badly. Readers that rebuild the table
+ * by scanning the file can still open it.
+ *
+ * @param {object} [options]  as for textDocument
+ * @returns {Promise<Fixture>}
+ */
+export async function damagedDocument(options = {}) {
+  const fixture = await textDocument({ pages: 2, ...options });
+  // byte for byte: TextDecoder's 'latin1' is really windows-1252 and would change bytes 0x80 to 0x9f
+  let text = Array.from(fixture.bytes, (b) => String.fromCharCode(b)).join('');
+  text = text.replace(/(\d{10}) (\d{5}) n/g, (_, offset, gen) => `${String(Number(offset) + 7).padStart(10, '0')} ${gen} n`);
+  text = text.replace(/startxref\s+(\d+)/, (_, n) => `startxref\n${String(Number(n) + 13)}`);
+  const bytes = Uint8Array.from(text, (c) => c.charCodeAt(0));
+  return { bytes, truth: fixture.truth };
+}
+
+/**
  * pdf-lib has no outline API, so build the dictionaries by hand: a flat list of entries,
  * each pointing at the top of its page.
  *

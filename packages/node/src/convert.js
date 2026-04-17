@@ -6,11 +6,13 @@ import { createLibreOffice, OFFICE_KINDS } from './libreoffice.js';
 import { createChromium } from './chromium.js';
 import { markdownToHtml } from './markdown.js';
 import { emlToHtml } from './email.js';
+import { createQpdf } from './qpdf.js';
 
 /**
  * @typedef {object} ConverterOptions
  * @property {import('./libreoffice.js').LibreOfficeOptions} [libreoffice]
  * @property {import('./chromium.js').ChromiumOptions} [chromium]
+ * @property {{ binary?: string, timeout?: number }} [qpdf]
  */
 
 /**
@@ -41,6 +43,13 @@ export function createConverter(options = {}) {
       throw err;
     }));
   const chromium = () => (browser ??= createChromium(options.chromium));
+  /** @type {ReturnType<typeof createQpdf> | null} */
+  let structural = null;
+  const qpdf = () =>
+    (structural ??= createQpdf(options.qpdf).catch((err) => {
+      structural = null;
+      throw err;
+    }));
   const decoder = new TextDecoder('utf-8');
 
   return {
@@ -79,6 +88,24 @@ export function createConverter(options = {}) {
      * @param {import('./chromium.js').PdfLayout & { allowHtml?: boolean, timeout?: number }} [opts]
      */
     markdownToPdf: (markdown, opts = {}) => chromium().htmlToPdf(markdownToHtml(markdown, { allowHtml: opts.allowHtml }), { ...opts, javascript: false }),
+    /**
+     * Smaller without losing anything (qpdf). Images are left as they are.
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {{ password?: string }} [opts]
+     */
+    compress: async (input, opts) => (await qpdf()).compress(await toBytes(input), opts),
+    /**
+     * Fast web view (qpdf).
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {{ password?: string }} [opts]
+     */
+    linearize: async (input, opts) => (await qpdf()).linearize(await toBytes(input), opts),
+    /**
+     * Rebuild a damaged file's structure (qpdf).
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {{ password?: string }} [opts]
+     */
+    repair: async (input, opts) => (await qpdf()).repair(await toBytes(input), opts),
     async close() {
       const lo = await office?.catch(() => null);
       await Promise.all([lo?.close(), browser?.close()]);
