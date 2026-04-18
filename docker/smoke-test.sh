@@ -40,6 +40,10 @@ curl -fsS -H "authorization: Bearer $key" -F file=@"$work/doc.pdf" -F 'options={
   http://127.0.0.1:3000/v1/pdf/rotate -o "$work/rotated.pdf"
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/rotated.pdf" http://127.0.0.1:3000/v1/pdf/inspect | grep -q '"rotation":90'
 
+echo "== compress"
+curl -fsS -H "authorization: Bearer $key" -F file=@"$work/doc.pdf" http://127.0.0.1:3000/v1/pdf/compress -o "$work/small.pdf"
+head -c 5 "$work/small.pdf" | grep -q '%PDF-'
+
 echo "== text from the converted docx"
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/report.pdf" http://127.0.0.1:3000/v1/pdf/text | grep -q 'Quarterly Report'
 

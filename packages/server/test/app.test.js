@@ -114,3 +114,16 @@ test('json endpoints explain what they need', async () => {
   const convertNone = await post('/v1/convert', await form([]));
   assert.match(convertNone.json().error.message, /one file/);
 });
+
+test('compress, linearize and repair, when qpdf is installed', async (t) => {
+  const { findQpdf } = await import('@open-documents/node');
+  if (!(await findQpdf())) return t.skip('qpdf is not installed');
+  const big = await textDocument({ pages: 40 });
+  const small = await post('/v1/pdf/compress', await form([file(big.bytes)]));
+  assert.equal(small.statusCode, 200);
+  assert.ok(small.rawPayload.length < big.bytes.length);
+  const fast = await post('/v1/pdf/linearize', await form([file()]));
+  assert.match(fast.rawPayload.subarray(0, 1024).toString('latin1'), /\/Linearized/);
+  const bad = await post('/v1/pdf/repair', await form([file(new TextEncoder().encode('not a pdf'), 'bad.pdf')]));
+  assert.deepEqual([bad.statusCode, bad.json().error.code], [422, 'DAMAGED_FILE']);
+});

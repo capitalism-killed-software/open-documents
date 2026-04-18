@@ -1,4 +1,5 @@
-# Open Documents server: the API, LibreOffice for office files, Chromium for web pages.
+# Open Documents server: the API, LibreOffice for office files, Chromium for web pages, qpdf
+# for compression and repair.
 #
 #   docker build -f docker/Dockerfile -t open-documents .
 #   docker run --rm -p 3000:3000 -e OPENDOCS_API_KEYS=<a long random key> \
@@ -18,7 +19,7 @@ RUN apt-get update \
       libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui libreoffice-draw-nogui \
       fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation fonts-liberation2 \
       fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
-      ca-certificates tini \
+      qpdf ca-certificates tini \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

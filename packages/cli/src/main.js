@@ -28,6 +28,11 @@ Pages (each writes a new file; -o names it):
   opendocs nup <file.pdf> [--columns 2] [--rows 1]
   opendocs blank <file.pdf> --at N [--count N]
 
+Structure (needs qpdf):
+  opendocs compress <file.pdf>     smaller, losing nothing
+  opendocs linearize <file.pdf>    fast web view
+  opendocs repair <file.pdf>       rebuild a damaged file
+
 Edit (each writes a new file; -o names it):
   opendocs stamp <file.pdf> --text "..." [--position top-right | --at x,y] [--size N]
   opendocs watermark <file.pdf> --text DRAFT [--color #ff0000] [--opacity 0.25] [--angle 45] [--behind]
@@ -217,6 +222,9 @@ const COMMANDS = {
     },
   },
   decrypt: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.decrypt(bytes, pw)) },
+  compress: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.compress(bytes, pw))) },
+  linearize: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.linearize(bytes, pw))) },
+  repair: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.repair(bytes, pw))) },
   images: { files: 'many', run: images },
 };
 
@@ -366,6 +374,19 @@ async function split({ files, values, io }) {
     const target = join(folder, `${stem(files[0])}-${String(i + 1).padStart(digits, '0')}.pdf`);
     await writeFile(target, part);
     await report(io, target, part);
+  }
+}
+
+/**
+ * @template T
+ * @param {(c: ReturnType<typeof createConverter>) => Promise<T>} use
+ */
+async function withConverter(use) {
+  const converter = createConverter();
+  try {
+    return await use(converter);
+  } finally {
+    await converter.close();
   }
 }
 

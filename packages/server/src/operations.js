@@ -5,7 +5,8 @@ import { zipSync } from 'fflate';
 
 /**
  * @typedef {{ type: string, body: Uint8Array | object, filename?: string }} Reply
- * @typedef {{ files: 'one' | 'many', run: (files: Uint8Array[], options: Record<string, any>) => Promise<Reply> }} Operation
+ * @typedef {{ converter: ReturnType<typeof import('@open-documents/node').createConverter> }} Context
+ * @typedef {{ files: 'one' | 'many', run: (files: Uint8Array[], options: Record<string, any>, ctx: Context) => Promise<Reply> }} Operation
  */
 
 /** @param {Uint8Array} body @returns {Reply} */
@@ -68,6 +69,11 @@ export const OPERATIONS = {
   // security
   encrypt: { files: 'one', run: async ([f], o) => pdf(await od.encrypt(f, /** @type {any} */ (o))) },
   decrypt: { files: 'one', run: async ([f], o) => pdf(await od.decrypt(f, o)) },
+
+  // structure, with qpdf
+  compress: { files: 'one', run: async ([f], o, ctx) => pdf(await ctx.converter.compress(f, o)) },
+  linearize: { files: 'one', run: async ([f], o, ctx) => pdf(await ctx.converter.linearize(f, o)) },
+  repair: { files: 'one', run: async ([f], o, ctx) => pdf(await ctx.converter.repair(f, o)) },
 
   // building
   'images-to-pdf': { files: 'many', run: async (files, o) => pdf(await od.imagesToPdf(files, o)) },

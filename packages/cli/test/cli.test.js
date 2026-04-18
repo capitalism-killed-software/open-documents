@@ -239,3 +239,12 @@ test('convert --url refuses private addresses', async () => {
   assert.equal(code, 1);
   assert.match(err, /error: (Not allowed to reach 127\.0\.0\.1|Chromium is not installed)/);
 });
+
+test('compress, linearize and repair', async (t) => {
+  const { findQpdf } = await import('@open-documents/node');
+  if (!(await findQpdf())) return t.skip('qpdf is not installed');
+  const o = (/** @type {string} */ name) => join(dir, name);
+  assert.match((await run(['compress', pdf, '-o', o('c.pdf')])).out, /c\.pdf {2}3 pages/);
+  assert.match((await run(['linearize', pdf, '-o', o('l.pdf')])).out, /l\.pdf {2}3 pages/);
+  assert.match((await run(['repair', pdf, '-o', o('r2.pdf')])).out, /r2\.pdf {2}3 pages/);
+});

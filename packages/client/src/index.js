@@ -137,6 +137,10 @@ export function createClient(options) {
     setBookmarks: (input, bookmarks, opts = {}) => run('set-bookmarks', input, { ...opts, bookmarks }),
     encrypt: one('encrypt'),
     decrypt: one('decrypt'),
+    // structure (needs qpdf on the server)
+    compress: one('compress'),
+    linearize: one('linearize'),
+    repair: one('repair'),
     /** @param {Input[]} images */
     imagesToPdf: (images, opts = {}) => run('images-to-pdf', images, opts),
     // convert

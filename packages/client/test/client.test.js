@@ -77,3 +77,13 @@ test('non-json failures and a missing base url', async () => {
   const slow = createClient({ baseUrl: 'http://x', fetch: async () => Response.json({ id: 'j', status: 'running', links: { self: '/v1/jobs/j', result: '/v1/jobs/j/result' } }) });
   await assert.rejects(slow.wait({ id: 'j', status: 'running', error: null, links: { self: '/v1/jobs/j', result: '/r' } }, { interval: 5, timeout: 20 }), { code: 'TIMEOUT' });
 });
+
+test('compress over http', async (t) => {
+  const { findQpdf } = await import('@open-documents/node');
+  if (!(await findQpdf())) return t.skip('qpdf is not installed');
+  const big = await textDocument({ pages: 40 });
+  const small = await client.compress(big.bytes);
+  assert.ok(small.length < big.bytes.length);
+  assert.equal((await inspect(await client.repair(big.bytes))).pageCount, 40);
+  assert.match(new TextDecoder('latin1').decode((await client.linearize(doc.bytes)).subarray(0, 1024)), /\/Linearized/);
+});

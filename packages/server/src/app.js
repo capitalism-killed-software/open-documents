@@ -150,7 +150,7 @@ export async function buildServer(options = {}) {
     const { files, options: { webhook, ...opts } } = await readForm(req);
     if (!files.length) throw new OpenDocumentsError('INVALID_INPUT', 'Upload the file as multipart form data.');
     if (op.files === 'one' && files.length > 1) throw new OpenDocumentsError('INVALID_INPUT', `${name} takes one file.`);
-    return respond(req, reply, () => op.run(files.map((f) => f.data), opts), webhook);
+    return respond(req, reply, () => op.run(files.map((f) => f.data), opts, { converter }), webhook);
   });
 
   app.post('/v1/convert', async (req, reply) => {

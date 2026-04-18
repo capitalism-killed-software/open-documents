@@ -22,7 +22,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # converters are tested in the conversions job, where LibreOffice and Chromium are installed
+      # converters are tested in the conversions job, where LibreOffice, Chromium and qpdf are installed
       - run: npm run check:portable
 
   conversions:
@@ -33,13 +33,14 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: LibreOffice and fonts
+      - name: LibreOffice, qpdf and fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libreoffice-writer libreoffice-calc libreoffice-impress \
+            libreoffice-writer libreoffice-calc libreoffice-impress qpdf \
             fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation fonts-noto-core
           soffice --version
+          qpdf --version
       - run: npm ci
       - name: Chromium
         run: npx playwright-core install --with-deps chromium

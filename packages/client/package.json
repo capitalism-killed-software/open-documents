@@ -16,6 +16,7 @@
   "devDependencies": {
     "@open-documents/core": "0.0.0",
     "@open-documents/fixtures": "0.0.0",
+    "@open-documents/node": "0.0.0",
     "@open-documents/server": "0.0.0"
   },
   "dependencies": {
