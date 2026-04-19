@@ -60,3 +60,15 @@ test('files that cannot be converted are refused with a reason', async () => {
   await assert.rejects(converter.toPdf(msg), { message: /save the message as \.eml/i });
   await assert.rejects(converter.toPdf(/** @type {any} */ ('text')), { code: 'INVALID_INPUT' });
 });
+
+test('compress, linearize and repair report a missing qpdf', async () => {
+  const without = createConverter({ qpdf: { binary: '/nonexistent/qpdf' } });
+  const { bytes } = await textDocument({ pages: 1 });
+  try {
+    for (const op of /** @type {const} */ (['compress', 'linearize', 'repair'])) {
+      await assert.rejects(without[op](bytes), { code: 'ENGINE_MISSING' }, op);
+    }
+  } finally {
+    await without.close();
+  }
+});

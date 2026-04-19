@@ -76,3 +76,24 @@ test('callers cannot widen what web pages may reach', async () => {
     await app.close();
   }
 });
+
+test('compress, linearize and repair go to the converter', async () => {
+  /** @type {string[]} */
+  const calls = [];
+  const spy = /** @type {any} */ ({
+    compress: async (/** @type {Uint8Array} */ b) => { calls.push('compress'); return b; },
+    linearize: async (/** @type {Uint8Array} */ b) => { calls.push('linearize'); return b; },
+    repair: async (/** @type {Uint8Array} */ b) => { calls.push('repair'); return b; },
+    close: async () => {},
+  });
+  const app = await buildServer({ converter: spy });
+  try {
+    for (const op of ['compress', 'linearize', 'repair']) {
+      const res = await app.inject({ method: 'POST', url: `/v1/pdf/${op}`, ...(await form([{ filename: 'a.pdf', data: doc.bytes }])) });
+      assert.equal(res.statusCode, 200, op);
+    }
+    assert.deepEqual(calls, ['compress', 'linearize', 'repair']);
+  } finally {
+    await app.close();
+  }
+});
