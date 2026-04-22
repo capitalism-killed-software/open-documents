@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.5.3",
+    "@kenjiuno/msgreader": "1.28.0",
     "docx": "9.6.1",
     "fflate": "0.8.2",
     "jpeg-js": "0.4.4",
