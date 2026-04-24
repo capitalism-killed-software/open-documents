@@ -5,7 +5,7 @@ import { sniff } from './sniff.js';
 import { createLibreOffice, OFFICE_KINDS } from './libreoffice.js';
 import { createChromium } from './chromium.js';
 import { markdownToHtml } from './markdown.js';
-import { emlToHtml } from './email.js';
+import { emlToHtml, msgToHtml } from './email.js';
 import { createQpdf } from './qpdf.js';
 
 /**
@@ -66,11 +66,10 @@ export function createConverter(options = {}) {
       if (kind === 'jpeg' || kind === 'png') return imagesToPdf([bytes], opts.image);
       if (kind === 'html') return chromium().htmlToPdf(decoder.decode(bytes), opts);
       if (kind === 'markdown') return chromium().htmlToPdf(markdownToHtml(decoder.decode(bytes), { allowHtml: opts.allowHtml }), { ...opts, javascript: false });
-      if (kind === 'eml') {
-        const page = await emlToHtml(bytes);
+      if (kind === 'eml' || kind === 'msg') {
+        const page = kind === 'eml' ? await emlToHtml(bytes) : await msgToHtml(bytes);
         return chromium().htmlToPdf(page.html, { ...opts, assets: page.assets, javascript: false });
       }
-      if (kind === 'msg') throw new OpenDocumentsError('INVALID_INPUT', 'Outlook .msg files are not supported yet. Save the message as .eml and convert that.');
       throw new OpenDocumentsError('INVALID_INPUT', kind === 'unknown' ? 'This file type is not recognised.' : `${kind} files cannot be converted to PDF yet.`);
     },
     /**

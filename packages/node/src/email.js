@@ -2,6 +2,7 @@
 // pictures taken from the message itself. Rendered like any other page, with scripts off and
 // no network, so a message cannot reach out when it is converted.
 import PostalMime from 'postal-mime';
+import msgreader from '@kenjiuno/msgreader';
 import { OpenDocumentsError } from '@open-documents/core';
 import { escape } from './markdown.js';
 
@@ -47,30 +48,96 @@ export async function emlToHtml(bytes) {
     else attachments.push({ filename: a.filename ?? 'attachment', mimeType: a.mimeType, size: data.length });
   }
   const who = (/** @type {any} */ list) =>
-    (Array.isArray(list) ? list : list ? [list] : [])
-      .map((/** @type {{ name?: string, address?: string }} */ p) => (p.name ? `${escape(p.name)} &lt;${escape(p.address ?? '')}&gt;` : escape(p.address ?? '')))
-      .join(', ');
+    (Array.isArray(list) ? list : list ? [list] : []).map((/** @type {{ name?: string, address?: string }} */ p) => ({ name: p.name ?? '', address: p.address ?? '' }));
   const dateHeader = email.headers?.find((h) => h.key === 'date')?.value ?? email.date ?? '';
+  return page({
+    subject: email.subject ?? '',
+    from: who(email.from),
+    to: who(email.to),
+    cc: who(email.cc),
+    date: dateHeader,
+    html: email.html ?? null,
+    text: email.text ?? '',
+    assets,
+    attachments,
+  });
+}
+
+/**
+ * @param {Uint8Array} bytes  an Outlook message (.msg)
+ * @returns {Promise<EmailPage>}
+ */
+export async function msgToHtml(bytes) {
+  let reader;
+  let data;
+  try {
+    reader = new msgreader.default(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    data = reader.getFileData();
+  } catch (err) {
+    throw new OpenDocumentsError('INVALID_INPUT', 'This Outlook message could not be read.', { cause: err });
+  }
+  if (data.error) throw new OpenDocumentsError('INVALID_INPUT', `This Outlook message could not be read: ${data.error}`);
+  if (!data.subject && !data.body && !data.html && !data.bodyHtml && !data.senderName && !data.recipients?.length) {
+    throw new OpenDocumentsError('INVALID_INPUT', 'This Outlook file holds no message: no sender, recipients, subject or body.');
+  }
+  /** @type {Record<string, Uint8Array>} */
+  const assets = {};
+  const attachments = [];
+  for (const a of data.attachments ?? []) {
+    const file = reader.getAttachment(a);
+    const content = new Uint8Array(file.content);
+    if (a.pidContentId) assets[`cid/${encodeURIComponent(a.pidContentId)}`] = content;
+    else attachments.push({ filename: file.fileName ?? 'attachment', mimeType: a.attachMimeTag ?? 'application/octet-stream', size: content.length });
+  }
+  const people = (/** @type {string} */ kind) =>
+    (data.recipients ?? [])
+      .filter((r) => (kind === 'cc' ? r.recipType === 'cc' : r.recipType !== 'cc' && r.recipType !== 'bcc'))
+      .map((r) => ({ name: r.name ?? '', address: r.smtpAddress ?? r.email ?? '' }));
+  return page({
+    subject: data.subject ?? '',
+    from: [{ name: data.senderName ?? '', address: data.senderSmtpAddress ?? data.senderEmail ?? '' }].filter((p) => p.name || p.address),
+    to: people('to'),
+    cc: people('cc'),
+    date: data.messageDeliveryTime ?? data.clientSubmitTime ?? '',
+    html: data.html ? new TextDecoder().decode(data.html) : (data.bodyHtml ?? null),
+    text: data.body ?? '',
+    assets,
+    attachments,
+  });
+}
+
+/**
+ * The page both kinds of email turn into.
+ *
+ * @param {{
+ *   subject: string, from: { name: string, address: string }[], to: { name: string, address: string }[],
+ *   cc: { name: string, address: string }[], date: string, html: string | null, text: string,
+ *   assets: Record<string, Uint8Array>, attachments: EmailPage['attachments'],
+ * }} m
+ * @returns {EmailPage}
+ */
+function page(m) {
+  const who = (/** @type {{ name: string, address: string }[]} */ list) =>
+    list.map((p) => (p.name ? `${escape(p.name)} &lt;${escape(p.address)}&gt;` : escape(p.address))).join(', ');
   const rows = /** @type {[string, string][]} */ ([
-    ['From', who(email.from)],
-    ['To', who(email.to)],
-    ['Cc', who(email.cc)],
-    ['Date', escape(dateHeader)],
+    ['From', who(m.from)],
+    ['To', who(m.to)],
+    ['Cc', who(m.cc)],
+    ['Date', escape(m.date)],
   ]).filter(([, v]) => v);
-  const subject = email.subject ?? '';
-  const body = email.html
-    ? email.html
+  const body = m.html
+    ? m.html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/\b(src|background)=(["'])cid:([^"']+)\2/gi, (_, attr, q, cid) => `${attr}=${q}cid/${encodeURIComponent(cid)}${q}`)
-    : `<pre class="text">${escape(email.text ?? '')}</pre>`;
-  const list = attachments.length
-    ? `<p class="attachments">Attachments: ${attachments.map((a) => `${escape(a.filename)} (${size(a.size)})`).join(', ')}</p>`
+    : `<pre class="text">${escape(m.text)}</pre>`;
+  const list = m.attachments.length
+    ? `<p class="attachments">Attachments: ${m.attachments.map((a) => `${escape(a.filename)} (${size(a.size)})`).join(', ')}</p>`
     : '';
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(subject)}</title><style>${EMAIL_CSS}</style></head><body>
-<p class="subject">${escape(subject)}</p>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(m.subject)}</title><style>${EMAIL_CSS}</style></head><body>
+<p class="subject">${escape(m.subject)}</p>
 <table class="headers">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>${list}
 <hr><div class="message">${body}</div></body></html>`;
-  return { html, assets, subject, attachments };
+  return { html, assets: m.assets, subject: m.subject, attachments: m.attachments };
 }
 
 /** @param {number} bytes */

@@ -1,7 +1,7 @@
 // Runs each kind of file through toPdf. Kinds whose converter is missing are skipped.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { docxDocument, xlsxDocument, odtDocument, csvDocument, emlMessage, pngImage, jpegImage, tiffImage, textDocument } from '@open-documents/fixtures';
+import { docxDocument, xlsxDocument, odtDocument, csvDocument, emlMessage, msgMessage, pngImage, jpegImage, tiffImage, textDocument } from '@open-documents/fixtures';
 import { extractText, inspect } from '@open-documents/core';
 import { createConverter, findLibreOffice, createChromium } from '../src/index.js';
 
@@ -50,14 +50,15 @@ test('html, markdown and email go to Chromium', { skip: noChrome }, async () => 
   assert.match(await textOf(await converter.toPdf(encode('<!doctype html><h1>Receipt</h1>'), { format: 'a5' })), /Receipt/);
   assert.match(await textOf(await converter.toPdf(encode('# Minutes\n\n- agreed'), { filename: 'minutes.md' })), /Minutes[\s\S]*agreed/);
   assert.match(await textOf(await converter.toPdf(emlMessage().bytes)), /Site visit on Tuesday/);
+  const msg = await converter.toPdf((await msgMessage()).bytes);
+  assert.match(await textOf(msg), /Quarterly numbers[\s\S]*The numbers are in for the quarter\./);
   assert.match(await textOf(await converter.markdownToPdf('**bold** move')), /bold move/);
   assert.match(await textOf(await converter.htmlToPdf('<p>direct</p>')), /direct/);
 });
 
 test('files that cannot be converted are refused with a reason', async () => {
   await assert.rejects(converter.toPdf(new Uint8Array([0, 1, 2, 0, 3])), { code: 'INVALID_INPUT', message: /not recognised/ });
-  const msg = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...[...'__substg1.0_'].flatMap((c) => [c.charCodeAt(0), 0])]);
-  await assert.rejects(converter.toPdf(msg), { message: /save the message as \.eml/i });
+  await assert.rejects(converter.toPdf(new TextEncoder().encode('PK\u0005\u0006' + '\0'.repeat(18))), { code: 'INVALID_INPUT' });
   await assert.rejects(converter.toPdf(/** @type {any} */ ('text')), { code: 'INVALID_INPUT' });
 });
 

@@ -4,6 +4,6 @@ export { createLibreOffice, findLibreOffice, OFFICE_KINDS } from './libreoffice.
 export { createChromium } from './chromium.js';
 export { createEgressProxy, isPublicAddress } from './egress.js';
 export { markdownToHtml } from './markdown.js';
-export { emlToHtml } from './email.js';
+export { emlToHtml, msgToHtml } from './email.js';
 export { createConverter } from './convert.js';
 export { createQpdf, findQpdf } from './qpdf.js';

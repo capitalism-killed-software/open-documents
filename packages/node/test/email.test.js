@@ -22,3 +22,23 @@ test('a plain-text message is shown as it was written', async () => {
   assert.match(page.html, /<pre class="text">Hello team,/);
   assert.match(page.html, /<p class="subject">Re: &lt;plans&gt; &amp; dates<\/p>/);
 });
+
+test('an Outlook message: the same page as an .eml', async () => {
+  const { msgMessage } = await import('@open-documents/fixtures');
+  const { msgToHtml } = await import('../src/index.js');
+  const page = await msgToHtml((await msgMessage()).bytes);
+  assert.equal(page.subject, 'Quarterly numbers');
+  assert.match(page.html, /<th>From<\/th><td>Finance Desk &lt;finance@example\.com&gt;<\/td>/);
+  assert.match(page.html, /<th>To<\/th><td>Team &lt;team@example\.com&gt;<\/td>/);
+  assert.match(page.html, /The <b>numbers<\/b> are in/);
+  assert.match(page.html, /src="cid\/chart%40example"/);
+  assert.ok(page.assets['cid/chart%40example'] instanceof Uint8Array);
+  assert.doesNotMatch(page.html, /<script/i);
+  assert.deepEqual(page.attachments.map((a) => a.filename), ['notes.txt']);
+});
+
+test('a broken Outlook message is refused', async () => {
+  const { msgToHtml } = await import('../src/index.js');
+  const ole = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...new Array(600).fill(0)]);
+  await assert.rejects(msgToHtml(ole), { code: 'INVALID_INPUT' });
+});
