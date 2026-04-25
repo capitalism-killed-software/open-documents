@@ -85,5 +85,30 @@ The standard fonts draw Latin text only; anything else is refused rather than dr
 |---|---|
 | `imagesToPdf([jpeg, png, ...], { pageSize, margin, dpi, orientation, title })` | One page per image, fitted and centred. `pageSize`: `"letter"` (default), `"a4"`, `"legal"`, `[w, h]` or `"fit"` (the image's own size at `dpi`). JPEG photos are turned by their EXIF orientation. |
 
-Office documents, web pages and PDF to Word, Excel and other formats need the server, which is
-not built yet.
+## Conversions and structure (Node)
+
+`@open-documents/node` adds what needs other programs. LibreOffice, Chromium and qpdf start the
+first time they are needed.
+
+```js
+import { createConverter } from '@open-documents/node';
+const converter = createConverter();
+const pdf = await converter.toPdf(bytes, { filename: 'report.docx' });
+await converter.close();
+```
+
+| Method | What it does |
+|---|---|
+| `toPdf(file, options)` | Any supported file to PDF: Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text (LibreOffice); HTML, Markdown, `.eml` and Outlook `.msg` (Chromium); JPEG and PNG (no other program); TIFF, GIF, WebP, BMP (LibreOffice). `filename` helps with CSV, Markdown and text. Layout options as below. |
+| `htmlToPdf(html, { assets, javascript, ... })` | `assets` are the files the HTML refers to by relative path. Scripts are off unless `javascript: true`. The page cannot reach the network. |
+| `markdownToPdf(markdown, { allowHtml, ... })` | With a clean print style. Raw HTML in the Markdown shows as text unless `allowHtml`. |
+| `urlToPdf(url, { allowHosts, ... })` | A live page, through a proxy that refuses private addresses. |
+| `compress(pdf, { password })` | Smaller, losing nothing (qpdf). Images are left as they are. |
+| `linearize(pdf, { password })` | Fast web view (qpdf). |
+| `repair(pdf, { password })` | Rebuild a damaged file (qpdf). |
+
+Layout options for HTML, Markdown, email and web pages: `format` (`letter`, `a4`, `legal`, `a3`,
+`a5`, `tabloid`), `size: { width, height }` as CSS lengths, `landscape`, `margin`, `scale`,
+`background`, `header` and `footer` (HTML, with `pageNumber` and `totalPages` classes).
+
+PDF to Word, Excel and other formats is planned.

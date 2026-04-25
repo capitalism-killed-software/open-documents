@@ -34,8 +34,9 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, metadata,
   bookmarks
 - **Security:** AES-256 encryption with permissions, and removing it
+- **Structure:** lossless compression, fast web view, repairing damaged files (needs qpdf)
 - **Convert to PDF:** Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
-  email, web pages, JPEG, PNG, TIFF and other images (office files need LibreOffice, web pages
+  email (`.eml` and Outlook `.msg`), web pages, JPEG, PNG, TIFF and other images (office files need LibreOffice, web pages
   need Chromium)
 
 Input is a `Uint8Array`, `ArrayBuffer` or `Blob`, and every function returns new bytes.
@@ -53,6 +54,7 @@ opendocs encrypt both.pdf --user-password open --no-copy
 opendocs render both.pdf --page 2 --dpi 150 -o page2.png
 opendocs convert report.docx                 # needs LibreOffice
 opendocs convert --url https://example.com -o page.pdf
+opendocs compress big.pdf                    # needs qpdf
 ```
 
 Run `opendocs --help` for the rest.
@@ -80,10 +82,10 @@ In the browser the engine runs on the page, so files never leave the computer: s
 ## Planned
 
 - **Edit:** images, links, existing text
-- **To PDF:** Outlook `.msg`, EPUB
+- **To PDF:** EPUB
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
-- **More:** annotations, forms, OCR, compare, compress, PDF/A, true redaction, digital
-  signatures, fonts beyond Latin
+- **More:** annotations, forms, OCR, compare, smaller scans (lossy image compression), PDF/A,
+  true redaction, digital signatures, fonts beyond Latin
 - **Ways to use it:** a viewer and editor component that works in any front-end framework
 
 ## Develop

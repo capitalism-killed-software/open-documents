@@ -20,7 +20,7 @@ The flags on the second line are recommended: the converters then run with no wa
 image, no extra privileges and nothing written outside `/tmp`. CI runs the image exactly like
 this on every change.
 
-Without Docker, with LibreOffice installed and Chromium fetched by Playwright:
+Without Docker, with LibreOffice and qpdf installed and Chromium fetched by Playwright:
 
 ```sh
 npm ci
@@ -40,6 +40,7 @@ npx opendocs-server           # listens on 127.0.0.1:3000
 | `OPENDOCS_WEBHOOK_SECRET` | none | Signs webhooks. Webhooks are refused without it. |
 | `OPENDOCS_SOFFICE` | found on the PATH | Path to LibreOffice's `soffice`. |
 | `OPENDOCS_CHROMIUM` | Playwright's build | Path to a Chromium executable. |
+| `OPENDOCS_QPDF` | found on the PATH | Path to `qpdf`. |
 | `OPENDOCS_WORK_DIR` | the system temp folder | Where LibreOffice profiles and job files go. |
 | `OPENDOCS_LOG` | `info` | Log level, or `0` for none. |
 
@@ -63,6 +64,7 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
 | `encrypt`, `decrypt` | PDF |
+| `compress` (lossless), `linearize` (fast web view), `repair` | PDF; these need qpdf, which the image includes |
 | `images-to-pdf` (several JPEG or PNG files) | PDF |
 
 `GET /v1/operations` lists them.
@@ -71,7 +73,7 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 
 | Endpoint | Body |
 |---|---|
-| `POST /v1/convert` | one file: Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown, email (`.eml`), JPEG, PNG, TIFF, GIF, WebP, BMP |
+| `POST /v1/convert` | one file: Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown, email (`.eml` and Outlook `.msg`), JPEG, PNG, TIFF, GIF, WebP, BMP |
 | `POST /v1/convert/html` | JSON `{ "html": "...", "options": {} }`, or multipart with `index.html` and the files it uses (`logo.png`, `css/print.css` and so on) |
 | `POST /v1/convert/markdown` | JSON `{ "markdown": "...", "options": {} }` |
 | `POST /v1/convert/url` | JSON `{ "url": "https://...", "options": {} }`; only when `OPENDOCS_ALLOW_URL=1` |
@@ -93,7 +95,7 @@ Errors are JSON with a stable code: `{ "error": { "code": "PASSWORD_REQUIRED", "
 | 409 | `NOT_READY` (job results) |
 | 413 | `TOO_LARGE`, `TOO_MANY_FILES` |
 | 422 | `PASSWORD_REQUIRED`, `UNSUPPORTED_SECURITY`, `DAMAGED_FILE`, `CONVERSION_FAILED` |
-| 501 | `ENGINE_MISSING` (LibreOffice or Chromium is not installed) |
+| 501 | `ENGINE_MISSING` (LibreOffice, Chromium or qpdf is not installed) |
 | 503 | `BUSY` |
 | 504 | `TIMEOUT` |
 
