@@ -35,7 +35,7 @@ const STATUS = {
  * @property {string} [webhookSecret]  signs webhooks; webhooks are refused without it
  * @property {number[]} [webhookDelays]  retry delays in milliseconds
  * @property {{ ttl?: number, concurrency?: number, maxJobs?: number }} [jobs]
- * @property {ReturnType<typeof createConverter>} [converter]
+ * @property {any} [converter]  from createConverter() in @open-documents/node; made on first use if left out
  * @property {boolean | object} [logger]
  */
 

@@ -2,23 +2,47 @@
   "name": "@open-documents/server",
   "version": "0.0.0",
   "description": "A self-hosted REST API for Open Documents: convert to PDF and change PDFs over HTTP.",
+  "keywords": [
+    "pdf",
+    "api",
+    "self-hosted",
+    "docker",
+    "convert"
+  ],
   "license": "Apache-2.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.js"
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/server"
   },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/server#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
+  "type": "module",
   "bin": {
     "opendocs-server": "./bin/opendocs-server.js"
   },
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
   "files": [
     "bin",
-    "src"
+    "src",
+    "types"
   ],
+  "scripts": {
+    "prepack": "node ../../tools/build-types.js server"
+  },
   "engines": {
     "node": ">=24"
   },
-  "devDependencies": {
-    "@open-documents/fixtures": "0.0.0"
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
     "@fastify/multipart": "9.4.0",
@@ -26,5 +50,8 @@
     "@open-documents/node": "0.0.0",
     "fastify": "5.8.2",
     "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.0.0"
   }
 }

@@ -2,16 +2,46 @@
   "name": "@open-documents/node",
   "version": "0.0.0",
   "description": "Conversions that need other programs: Office documents, web pages, Markdown and email to PDF. Node only.",
+  "keywords": [
+    "pdf",
+    "convert",
+    "docx",
+    "xlsx",
+    "pptx",
+    "html-to-pdf",
+    "libreoffice",
+    "chromium"
+  ],
   "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/node#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
   "type": "module",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "files": [
-    "src"
+    "src",
+    "types"
   ],
+  "scripts": {
+    "prepack": "node ../../tools/build-types.js node"
+  },
   "engines": {
     "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
     "@kenjiuno/msgreader": "1.28.0",

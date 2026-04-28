@@ -2,7 +2,22 @@
   "name": "@open-documents/cli",
   "version": "0.0.0",
   "description": "opendocs: inspect, render and change PDF files from the command line.",
+  "keywords": [
+    "pdf",
+    "cli",
+    "merge",
+    "split",
+    "convert"
+  ],
   "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/cli#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
   "type": "module",
   "bin": {
     "opendocs": "./bin/opendocs.js"
@@ -14,11 +29,15 @@
   "engines": {
     "node": ">=24"
   },
-  "devDependencies": {
-    "@open-documents/fixtures": "0.0.0"
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
     "@open-documents/core": "0.0.0",
     "@open-documents/node": "0.0.0"
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.0.0"
   }
 }

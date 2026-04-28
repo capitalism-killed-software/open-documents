@@ -5,7 +5,7 @@ import { zipSync } from 'fflate';
 
 /**
  * @typedef {{ type: string, body: Uint8Array | object, filename?: string }} Reply
- * @typedef {{ converter: ReturnType<typeof import('@open-documents/node').createConverter> }} Context
+ * @typedef {{ converter: any }} Context  converter: from createConverter() in @open-documents/node
  * @typedef {{ files: 'one' | 'many', run: (files: Uint8Array[], options: Record<string, any>, ctx: Context) => Promise<Reply> }} Operation
  */
 

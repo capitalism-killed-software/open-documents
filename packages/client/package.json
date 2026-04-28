@@ -2,24 +2,49 @@
   "name": "@open-documents/client",
   "version": "0.0.0",
   "description": "Call an Open Documents server from Node or the browser, with the same function names as @open-documents/core.",
+  "keywords": [
+    "pdf",
+    "api",
+    "client"
+  ],
   "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/client#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
   "type": "module",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "files": [
-    "src"
+    "src",
+    "types"
   ],
+  "scripts": {
+    "prepack": "node ../../tools/build-types.js client"
+  },
   "engines": {
     "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "fflate": "0.8.2"
   },
   "devDependencies": {
     "@open-documents/core": "0.0.0",
     "@open-documents/fixtures": "0.0.0",
     "@open-documents/node": "0.0.0",
     "@open-documents/server": "0.0.0"
-  },
-  "dependencies": {
-    "fflate": "0.8.2"
   }
 }

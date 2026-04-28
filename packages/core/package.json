@@ -2,10 +2,32 @@
   "name": "@open-documents/core",
   "version": "0.0.0",
   "description": "Read, render and change PDF files in the browser and in Node.",
+  "keywords": [
+    "pdf",
+    "pdfium",
+    "merge",
+    "split",
+    "watermark",
+    "encrypt",
+    "render",
+    "browser"
+  ],
   "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/core#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
   "type": "module",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "imports": {
     "#platform": {
@@ -14,17 +36,25 @@
     }
   },
   "files": [
-    "src"
+    "src",
+    "types"
   ],
+  "scripts": {
+    "prepack": "node ../../tools/build-types.js core"
+  },
   "engines": {
     "node": ">=24"
   },
-  "devDependencies": {
-    "@open-documents/fixtures": "0.0.0"
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.5.3",
     "@embedpdf/pdfium": "2.2.0",
     "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.0.0"
   }
 }
