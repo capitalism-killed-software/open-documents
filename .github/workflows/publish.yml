@@ -1,0 +1,35 @@
+name: publish
+
+# Run by hand from the Actions tab. A dry run unless told otherwise.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only show what would be published
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run check:portable
+      - name: Publish
+        # npm trusted publishing (OIDC) once each package is set up on npmjs.com;
+        # NPM_TOKEN only for the very first publish, before the packages exist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for p in core node server client cli; do
+            npm publish --workspace "@open-documents/$p" --access public --provenance ${{ inputs.dry_run && '--dry-run' || '' }}
+          done
