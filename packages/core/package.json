@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.5.3",
-    "@embedpdf/pdfium": "2.2.0",
+    "@embedpdf/pdfium": "2.14.2",
     "fflate": "0.8.2"
   },
   "devDependencies": {
