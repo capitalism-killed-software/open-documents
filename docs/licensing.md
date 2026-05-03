@@ -9,7 +9,8 @@ on every change (`npm run licences`, also part of `npm run check` and CI).
 ## What a dependency may be licensed under
 
 MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, BlueOak-1.0.0, CC0-1.0,
-Unlicense, Python-2.0, CC-BY-4.0. The list lives in `tools/licence-policy.json`.
+Unlicense, Python-2.0, CC-BY-4.0, and OFL-1.1 for fonts (the SIL Open Font License, which lets
+fonts be bundled and embedded freely). The list lives in `tools/licence-policy.json`.
 
 An SPDX expression passes when it can be satisfied from that list: `MIT OR GPL-3.0` passes,
 `MIT AND GPL-2.0` does not. A package with no licence fails until someone checks it by hand and

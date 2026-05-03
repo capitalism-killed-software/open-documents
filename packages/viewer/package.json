@@ -1,0 +1,66 @@
+{
+  "name": "@open-documents/viewer",
+  "version": "0.0.0",
+  "description": "A PDF viewer and editor you can put in any web page, as Web Components: <od-viewer>.",
+  "keywords": [
+    "pdf",
+    "viewer",
+    "web-components",
+    "custom-elements",
+    "pdfium"
+  ],
+  "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/viewer"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/viewer#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@embedpdf/core": "2.14.2",
+    "@embedpdf/engines": "2.14.2",
+    "@embedpdf/fonts-arabic": "1.0.0",
+    "@embedpdf/fonts-hebrew": "1.0.0",
+    "@embedpdf/fonts-jp": "1.0.0",
+    "@embedpdf/fonts-kr": "1.0.0",
+    "@embedpdf/fonts-latin": "1.0.0",
+    "@embedpdf/fonts-sc": "1.0.0",
+    "@embedpdf/fonts-tc": "1.0.0",
+    "@embedpdf/models": "2.14.2",
+    "@embedpdf/plugin-document-manager": "2.14.2",
+    "@embedpdf/plugin-export": "2.14.2",
+    "@embedpdf/plugin-interaction-manager": "2.14.2",
+    "@embedpdf/plugin-render": "2.14.2",
+    "@embedpdf/plugin-scroll": "2.14.2",
+    "@embedpdf/plugin-search": "2.14.2",
+    "@embedpdf/plugin-selection": "2.14.2",
+    "@embedpdf/plugin-thumbnail": "2.14.2",
+    "@embedpdf/plugin-tiling": "2.14.2",
+    "@embedpdf/plugin-viewport": "2.14.2",
+    "@embedpdf/plugin-zoom": "2.14.2",
+    "htm": "3.1.1",
+    "preact": "10.29.1"
+  },
+  "devDependencies": {
+    "@open-documents/core": "0.0.0",
+    "@open-documents/fixtures": "0.0.0",
+    "esbuild": "0.27.3",
+    "playwright-core": "1.58.2"
+  }
+}

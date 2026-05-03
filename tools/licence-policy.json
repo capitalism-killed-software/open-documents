@@ -13,7 +13,8 @@
     "CC0-1.0",
     "Unlicense",
     "Python-2.0",
-    "CC-BY-4.0"
+    "CC-BY-4.0",
+    "OFL-1.1"
   ],
   "deny": {
     "mupdf": "MuPDF is AGPL-3.0",
