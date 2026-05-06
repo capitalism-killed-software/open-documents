@@ -1,0 +1,206 @@
+// The viewer in a real browser. Needs Chromium (`npx playwright-core install chromium`);
+// skipped when it cannot start.
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtemp, rm, writeFile, copyFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+import { chromium } from 'playwright-core';
+import { textDocument } from '@open-documents/fixtures';
+import { inspect } from '@open-documents/core';
+
+const entry = fileURLToPath(new URL('../src/index.js', import.meta.url));
+let dir = '';
+/** @type {import('node:http').Server} */
+let server;
+let base = '';
+/** @type {import('playwright-core').Browser | null} */
+let browser = null;
+try {
+  browser = await chromium.launch({ headless: true });
+} catch {
+  browser = null;
+}
+const skip = browser ? false : 'Chromium is not installed';
+
+before(async () => {
+  if (!browser) return;
+  dir = await mkdtemp(join(tmpdir(), 'od-viewer-'));
+  await build({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'browser', outfile: join(dir, 'viewer.js'), logLevel: 'silent' });
+  await copyFile(fileURLToPath(import.meta.resolve('@embedpdf/pdfium/pdfium.wasm')), join(dir, 'pdfium.wasm'));
+  const lines = (/** @type {number} */ n) => Array.from({ length: 30 }, (_, i) => `Page ${n} line ${i + 1}`);
+  await writeFile(join(dir, 'five.pdf'), (await textDocument({ pages: 5, lines })).bytes);
+  await writeFile(join(dir, 'locked.pdf'), (await textDocument({ pages: 2, encrypt: { userPassword: 'open' } })).bytes);
+  await writeFile(join(dir, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,">
+    <script type="module" src="./viewer.js"></script></head><body>
+    <od-viewer id="v" wasm-url="./pdfium.wasm" style="--od-height: 640px; width: 820px"></od-viewer>
+    </body></html>`);
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.pdf': 'application/pdf' };
+  server = createServer(async (req, res) => {
+    try {
+      const path = new URL(req.url ?? '/', 'http://x').pathname;
+      const body = await readFile(join(dir, path === '/' ? 'index.html' : path.slice(1)));
+      res.writeHead(200, { 'content-type': types[/** @type {keyof types} */ (extname(path) || '.html')] ?? 'application/octet-stream' }).end(body);
+    } catch {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+  base = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}`;
+});
+
+after(async () => {
+  await browser?.close();
+  server?.close();
+  if (dir) await rm(dir, { recursive: true, force: true });
+});
+
+/** A page with the viewer, a five-page PDF loaded. */
+async function open() {
+  const page = await /** @type {import('playwright-core').Browser} */ (browser).newPage({ viewport: { width: 900, height: 760 } });
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${base}/`);
+  const loaded = await page.evaluate(async () => {
+    const v = /** @type {any} */ (document.getElementById('v'));
+    const events = /** @type {any[]} */ ([]);
+    v.addEventListener('od-load', (/** @type {any} */ e) => events.push(e.detail));
+    const result = await v.load('./five.pdf');
+    return { result, events };
+  });
+  await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).shadowRoot.querySelectorAll('.page img').length > 0);
+  return { page, loaded, errors };
+}
+
+/** @param {import('playwright-core').Page} page @param {string} selector */
+const inViewer = (page, selector) => page.locator(`#v >> css=${selector}`);
+
+test('loads a document and draws its pages', { skip }, async () => {
+  const { page, loaded, errors } = await open();
+  try {
+    assert.deepEqual(loaded.result, { pageCount: 5 });
+    assert.deepEqual(loaded.events, [{ pageCount: 5, name: 'five.pdf' }]);
+    assert.match(await inViewer(page, '.bar').innerText(), /of 5/);
+    assert.ok((await inViewer(page, '.page').count()) >= 1);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('moves between pages and reports where it is', { skip }, async () => {
+  const { page } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).goToPage(3));
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).page === 3);
+    assert.equal(await inViewer(page, '.page-input').inputValue(), '3');
+    await inViewer(page, 'button[aria-label="Next page"]').click();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).page === 4);
+    await inViewer(page, '.page-input').fill('1');
+    await inViewer(page, '.page-input').press('Enter');
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).page === 1);
+  } finally {
+    await page.close();
+  }
+});
+
+test('zooms in and out', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const level = async () => Number((await inViewer(page, '.bar').innerText()).match(/(\d+)%/)?.[1]);
+    const start = await level();
+    await inViewer(page, 'button[aria-label="Zoom in"]').click();
+    await page.waitForFunction(async (s) => Number(/** @type {any} */ (document.getElementById('v')).shadowRoot.querySelector('.bar').textContent.match(/(\d+)%/)?.[1]) > s, start);
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).zoomOut());
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).fitWidth());
+    await page.waitForFunction((s) => Number(/** @type {any} */ (document.getElementById('v')).shadowRoot.querySelector('.bar').textContent.match(/(\d+)%/)?.[1]) === s, start);
+  } finally {
+    await page.close();
+  }
+});
+
+test('finds text, from the box and from code', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const count = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).search('line 30'));
+    assert.equal(count, 5);
+    await inViewer(page, '.search').fill('Page 4 line 2');
+    await inViewer(page, '.search').press('Enter');
+    // results arrive page by page, so wait for the count to settle: "Page 4 line 2" also
+    // matches lines 20 to 29
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).shadowRoot.querySelector('.results').textContent === '1 of 11');
+    await inViewer(page, 'button[aria-label="Next match"]').click();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).shadowRoot.querySelector('.results').textContent === '2 of 11');
+  } finally {
+    await page.close();
+  }
+});
+
+test('page thumbnails open and take you to a page', { skip }, async () => {
+  const { page } = await open();
+  try {
+    await inViewer(page, 'button[aria-label="Show pages"]').click();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).shadowRoot.querySelectorAll('.thumb img').length >= 2);
+    await inViewer(page, '.thumb >> nth=1').click();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).page === 2);
+  } finally {
+    await page.close();
+  }
+});
+
+test('save hands back the document as PDF bytes', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const bytes = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const info = await inspect(new Uint8Array(bytes));
+    assert.equal(info.pageCount, 5);
+  } finally {
+    await page.close();
+  }
+});
+
+test('encrypted files need their password', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const refused = await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      const seen = /** @type {any[]} */ ([]);
+      v.addEventListener('od-error', (/** @type {any} */ e) => seen.push(e.detail.code));
+      const failure = await v.load('./locked.pdf').then(() => null, (/** @type {any} */ e) => e.code);
+      return { failure, seen };
+    });
+    assert.equal(refused.failure, 'PASSWORD_REQUIRED');
+    assert.deepEqual(refused.seen, ['PASSWORD_REQUIRED']);
+    const ok = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).load('./locked.pdf', { password: 'open' }));
+    assert.deepEqual(ok, { pageCount: 2 });
+  } finally {
+    await page.close();
+  }
+});
+
+test('the src attribute, and a missing wasm-url', { skip }, async () => {
+  const page = await /** @type {import('playwright-core').Browser} */ (browser).newPage();
+  try {
+    await page.goto(`${base}/`);
+    const count = await page.evaluate(() => new Promise((resolve) => {
+      const v = document.createElement('od-viewer');
+      v.setAttribute('wasm-url', './pdfium.wasm');
+      v.addEventListener('od-load', (/** @type {any} */ e) => resolve(e.detail.pageCount));
+      v.setAttribute('src', './five.pdf');
+      document.body.append(v);
+    }));
+    assert.equal(count, 5);
+    const message = await page.evaluate(() => {
+      const v = document.createElement('od-viewer');
+      document.body.append(v);
+      return /** @type {ShadowRoot} */ (v.shadowRoot).textContent;
+    });
+    assert.match(String(message), /wasm-url/);
+  } finally {
+    await page.close();
+  }
+});
