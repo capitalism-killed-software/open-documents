@@ -92,7 +92,7 @@ export class OdViewer extends HTMLElement {
 
   /** @param {number} page  from 1 */
   goToPage(page) {
-    this.#scroll()?.scrollToPage({ pageNumber: page });
+    this.#scroll()?.scrollToPage({ pageNumber: page, behavior: 'instant' });
   }
 
   zoomIn() {
@@ -159,6 +159,7 @@ export class OdViewer extends HTMLElement {
       if (previous && previous !== this.controller.documentId) manager.closeDocument(previous);
       const pageCount = /** @type {any} */ (doc).pageCount ?? 0;
       this.state.pageCount = pageCount;
+      await this.#settled();
       this.controller.emit('od-load', { pageCount, name: job.name });
       job.done({ pageCount });
     } catch (err) {
@@ -172,6 +173,24 @@ export class OdViewer extends HTMLElement {
       this.controller.emit('od-error', detail);
       job.fail(Object.assign(new Error(detail.message), { code: detail.code }));
     }
+  }
+
+  /**
+   * Wait for a newly opened document to be laid out and zoomed to its first fit, which scrolls
+   * the view back to the top. Until then a goToPage() would be undone.
+   */
+  async #settled() {
+    const zoom = this.#zoom();
+    await new Promise((resolve) => {
+      const timer = setTimeout(done, 600);
+      const off = zoom?.onZoomChange?.(() => done());
+      function done() {
+        clearTimeout(timer);
+        if (typeof off === 'function') off();
+        resolve(undefined);
+      }
+    });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined))));
   }
 
   /** @param {string} id */

@@ -204,3 +204,25 @@ test('the src attribute, and a missing wasm-url', { skip }, async () => {
     await page.close();
   }
 });
+
+test('goToPage straight after load lands on that page', { skip }, async () => {
+  const { page } = await open();
+  try {
+    await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      await v.load('./five.pdf');
+      v.goToPage(4);
+    });
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).page === 4);
+    // and it stays there: the first fit-to-width zoom does not throw it back to the top
+    await page.waitForTimeout(800);
+    const state = await page.evaluate(() => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      return { page: v.page, scrolled: v.shadowRoot.querySelector('.viewport').scrollTop };
+    });
+    assert.equal(state.page, 4);
+    assert.ok(state.scrolled > 1000, `scrolled ${state.scrolled}px`);
+  } finally {
+    await page.close();
+  }
+});
