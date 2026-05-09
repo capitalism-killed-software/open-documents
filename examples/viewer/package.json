@@ -1,0 +1,15 @@
+{
+  "name": "open-documents-example-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The <od-viewer> component on a page, with core operations to change the document it shows.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node build.js && node ../browser/serve.js dist"
+  },
+  "dependencies": {
+    "@open-documents/core": "0.0.0",
+    "@open-documents/viewer": "0.0.0"
+  }
+}

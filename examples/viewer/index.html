@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open Documents viewer</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; background: #f6f6f7; color: #1d1d1f; }
+    header { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
+    h1 { font-size: 1.1rem; margin: 0 1rem 0 0; }
+    button, label.button { font: inherit; padding: .4rem .8rem; border-radius: 6px; border: 1px solid #1d1d1f; background: #1d1d1f; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .4; cursor: default; }
+    #status { color: #6e6e73; }
+    od-viewer { --od-height: calc(100vh - 6rem); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Open Documents viewer</h1>
+    <label class="button">Open a PDF<input type="file" id="pick" accept="application/pdf" hidden></label>
+    <button id="rotate" disabled>Rotate this page</button>
+    <button id="remove" disabled>Delete this page</button>
+    <button id="download" disabled>Download</button>
+    <span id="status">Nothing open yet. Files stay on this computer.</span>
+  </header>
+  <od-viewer id="viewer" wasm-url="./pdfium.wasm" sidebar="true"></od-viewer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

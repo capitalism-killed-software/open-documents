@@ -1,10 +1,11 @@
-// A tiny static server for dist/, on localhost only.
+// A tiny static server for a folder (dist/ by default), on localhost only.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('dist/', import.meta.url));
+// the folder to serve: the one given, or this example's own dist/
+const root = process.argv[2] ? resolve(process.argv[2]) + sep : fileURLToPath(new URL('dist/', import.meta.url));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 const port = Number(process.env.PORT ?? 5174);
 
