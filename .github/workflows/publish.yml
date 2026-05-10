@@ -30,6 +30,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for p in core node server client cli; do
+          for p in core node server client cli viewer; do
             npm publish --workspace "@open-documents/$p" --access public --provenance ${{ inputs.dry_run && '--dry-run' || '' }}
           done

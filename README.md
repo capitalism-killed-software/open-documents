@@ -79,6 +79,19 @@ same function names as the library.
 In the browser the engine runs on the page, so files never leave the computer: see
 [examples/browser](examples/browser).
 
+## The viewer
+
+A PDF viewer for any web page, as a Web Component, so it works in plain HTML and in every
+front-end framework: pages, thumbnails, zoom, search, text selection.
+
+```html
+<script type="module">import '@open-documents/viewer';</script>
+<od-viewer src="/contract.pdf" wasm-url="/pdfium.wasm"></od-viewer>
+```
+
+See [packages/viewer](packages/viewer) and [examples/viewer](examples/viewer), which changes the
+document in view with the library and shows the result.
+
 ## Planned
 
 - **Edit:** images, links, existing text
@@ -86,7 +99,7 @@ In the browser the engine runs on the page, so files never leave the computer: s
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
 - **More:** annotations, forms, OCR, compare, smaller scans (lossy image compression), PDF/A,
   true redaction, digital signatures, fonts beyond Latin
-- **Ways to use it:** a viewer and editor component that works in any front-end framework
+- **Viewer:** annotations, form filling, a page organiser, signing
 
 ## Develop
 
