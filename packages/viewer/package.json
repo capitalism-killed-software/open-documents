@@ -43,8 +43,10 @@
     "@embedpdf/fonts-sc": "1.0.0",
     "@embedpdf/fonts-tc": "1.0.0",
     "@embedpdf/models": "2.14.2",
+    "@embedpdf/plugin-annotation": "2.14.2",
     "@embedpdf/plugin-document-manager": "2.14.2",
     "@embedpdf/plugin-export": "2.14.2",
+    "@embedpdf/plugin-history": "2.14.2",
     "@embedpdf/plugin-interaction-manager": "2.14.2",
     "@embedpdf/plugin-render": "2.14.2",
     "@embedpdf/plugin-scroll": "2.14.2",
@@ -58,6 +60,7 @@
     "preact": "10.29.1"
   },
   "devDependencies": {
+    "@cantoo/pdf-lib": "2.5.3",
     "@open-documents/core": "0.0.0",
     "@open-documents/fixtures": "0.0.0",
     "esbuild": "0.27.3",

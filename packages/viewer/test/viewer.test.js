@@ -226,3 +226,57 @@ test('goToPage straight after load lands on that page', { skip }, async () => {
     await page.close();
   }
 });
+
+/**
+ * Annotation subtypes on each page of a saved PDF, read with pdf-lib.
+ * @param {Uint8Array} bytes
+ */
+async function annotationsIn(bytes) {
+  const { PDFDocument, PDFName, PDFArray, PDFDict } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.load(bytes);
+  return doc.getPages().map((p) => {
+    const annots = p.node.lookupMaybe(PDFName.of('Annots'), PDFArray);
+    if (!annots) return [];
+    return Array.from({ length: annots.size() }, (_, i) => String(/** @type {any} */ (annots.lookup(i, PDFDict)).get(PDFName.of('Subtype'))).slice(1));
+  });
+}
+
+test('annotate: draw with the pen, add a note, undo it, save', { skip }, async () => {
+  const { page } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('annotate', 'true'));
+    await inViewer(page, 'button[data-tool="ink"]').waitFor();
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await inViewer(page, 'button[data-tool="ink"]').click();
+    assert.equal(await inViewer(page, 'button[data-tool="ink"]').getAttribute('aria-pressed'), 'true');
+    const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    await page.mouse.move(box.x + 100, box.y + 200);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + 100 + i * 20, box.y + 200 + (i % 2) * 30);
+    await page.mouse.up();
+    await page.waitForFunction((list) => list.some((c) => c.type === 'create'), changes);
+
+    await inViewer(page, 'button[data-tool="textComment"]').click();
+    await page.mouse.click(box.x + 300, box.y + 120);
+    await page.waitForFunction((list) => list.filter((c) => c.type === 'create').length >= 2, changes);
+    const kinds = await page.evaluate((list) => list.filter((c) => c.type === 'create').map((c) => c.annotation), changes);
+    assert.deepEqual(kinds.slice(0, 2), ['ink', 'text']);
+
+    const saved = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const first = (await annotationsIn(new Uint8Array(saved)))[0];
+    assert.ok(first.includes('Ink'), `ink on page 1: ${first}`);
+    assert.ok(first.includes('Text'), `a note on page 1: ${first}`);
+
+    await inViewer(page, 'button[aria-label="Undo"]').click();
+    await page.waitForTimeout(300);
+    const undone = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const after = (await annotationsIn(new Uint8Array(undone)))[0];
+    assert.ok(after.includes('Ink') && !after.includes('Text'), `the note is gone, the ink stays: ${after}`);
+  } finally {
+    await page.close();
+  }
+});

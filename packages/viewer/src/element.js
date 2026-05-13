@@ -3,10 +3,12 @@
 //   <od-viewer src="/contract.pdf" wasm-url="/pdfium.wasm"></od-viewer>
 //
 // Attributes: src, wasm-url (required: where pdfium.wasm is served), fonts-url, toolbar
-// ("false" hides it), sidebar ("true" shows page thumbnails at start).
+// ("false" hides it), sidebar ("true" shows page thumbnails at start), annotate ("true" shows
+// the annotation tools), author (written into new annotations).
 // Methods: load(pdf, { password, name }), save(), goToPage(n), zoomIn(), zoomOut(),
-// fitWidth(), search(text).
-// Events: od-load { pageCount, name }, od-page { page, pageCount }, od-error { code, message }.
+// fitWidth(), search(text), setTool(id), undo(), redo().
+// Events: od-load { pageCount, name }, od-page { page, pageCount }, od-change { type, page,
+// annotation }, od-error { code, message }.
 import { h, render } from 'preact';
 import { App } from './app.js';
 import { STYLES } from './styles.js';
@@ -15,7 +17,7 @@ import { ZoomMode } from '@embedpdf/plugin-zoom';
 /** @typedef {Uint8Array | ArrayBuffer | Blob | string | URL} PdfSource */
 
 export class OdViewer extends HTMLElement {
-  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar'];
+  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author'];
 
   constructor() {
     super();
@@ -121,6 +123,25 @@ export class OdViewer extends HTMLElement {
     return /** @type {any} */ (result)?.total ?? /** @type {any} */ (result)?.results?.length ?? 0;
   }
 
+  /**
+   * Pick an annotation tool, or null to go back to selecting: highlight, underline, strikeout,
+   * ink, freeText, textComment, square, and EmbedPDF's other tools.
+   *
+   * @param {string | null} tool
+   */
+  setTool(tool) {
+    const id = this.controller.documentId;
+    if (id) this.#capability('annotation')?.forDocument(id).setActiveTool(tool);
+  }
+
+  undo() {
+    this.#capability('history')?.undo();
+  }
+
+  redo() {
+    this.#capability('history')?.redo();
+  }
+
   #render() {
     const wasm = this.getAttribute('wasm-url');
     if (!wasm) {
@@ -136,6 +157,8 @@ export class OdViewer extends HTMLElement {
           fontsUrl: fonts ? new URL(fonts, document.baseURI).href : null,
           toolbar: this.getAttribute('toolbar') !== 'false',
           sidebar: this.getAttribute('sidebar') === 'true',
+          annotate: this.getAttribute('annotate') === 'true',
+          author: this.getAttribute('author') ?? '',
           controller: this.controller,
           pending: this.pending,
         }),

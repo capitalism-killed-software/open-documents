@@ -26,6 +26,7 @@ export const STYLES = `
 .bar .page-input { width: 3.5em; text-align: right; }
 .bar .search { width: 12em; }
 .bar .muted { color: var(--od-muted); }
+.bar.tools { padding-top: 4px; padding-bottom: 4px; }
 .body { flex: 1; display: flex; min-height: 0; }
 .sidebar { width: 150px; border-right: 1px solid var(--od-line); background: var(--od-bar); }
 .thumb { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
@@ -34,6 +35,9 @@ export const STYLES = `
 .thumb span { font-size: 11px; color: var(--od-muted); margin-top: 2px; }
 .viewport { flex: 1; min-width: 0; }
 .page { position: relative; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+/* page images are pictures of the page, not things to drag: a native image drag would cancel
+   the pointer events that drawing and selecting rely on */
+.page img { pointer-events: none; -webkit-user-drag: none; user-select: none; }
 .message { margin: auto; padding: 24px; color: var(--od-muted); text-align: center; }
 .message.error { color: #b3261e; }
 `;

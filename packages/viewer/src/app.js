@@ -19,12 +19,17 @@ import { TilingLayer } from '@embedpdf/plugin-tiling/preact';
 import { ZoomPluginPackage, ZoomMode } from '@embedpdf/plugin-zoom';
 import { useZoom } from '@embedpdf/plugin-zoom/preact';
 import { InteractionManagerPluginPackage } from '@embedpdf/plugin-interaction-manager';
+import { PagePointerProvider, GlobalPointerProvider } from '@embedpdf/plugin-interaction-manager/preact';
 import { ThumbnailPluginPackage } from '@embedpdf/plugin-thumbnail';
 import { ThumbnailsPane, ThumbImg } from '@embedpdf/plugin-thumbnail/preact';
 import { SearchPluginPackage } from '@embedpdf/plugin-search';
 import { SearchLayer, useSearch } from '@embedpdf/plugin-search/preact';
 import { SelectionPluginPackage, SelectionLayer } from '@embedpdf/plugin-selection/preact';
 import { ExportPluginPackage } from '@embedpdf/plugin-export/preact';
+import { HistoryPluginPackage } from '@embedpdf/plugin-history';
+import { AnnotationPluginPackage, AnnotationLayer, useAnnotation } from '@embedpdf/plugin-annotation/preact';
+import { useCapability } from '@embedpdf/core/preact';
+import { PdfAnnotationSubtype } from '@embedpdf/models';
 import { fontConfig } from './fonts.js';
 
 const html = htm.bind(h);
@@ -39,10 +44,21 @@ const html = htm.bind(h);
  * @property {(event: string, detail: object) => void} emit
  */
 
+/** The annotation tools offered, in toolbar order: EmbedPDF tool id and label. */
+export const TOOLS = [
+  ['highlight', 'Highlight'],
+  ['underline', 'Underline'],
+  ['strikeout', 'Strike out'],
+  ['ink', 'Pen'],
+  ['freeText', 'Text'],
+  ['textComment', 'Note'],
+  ['square', 'Box'],
+];
+
 /**
- * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, controller: Controller, pending: { current: any } }} props
+ * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, author: string, controller: Controller, pending: { current: any } }} props
  */
-export function App({ wasmUrl, fontsUrl, toolbar, sidebar, controller, pending }) {
+export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, author, controller, pending }) {
   // the engine restarts whenever its settings change, so keep the font settings the same object
   const fontFallback = useMemo(() => fontConfig(fontsUrl), [fontsUrl]);
   const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl, worker: true, fontFallback });
@@ -58,7 +74,9 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, controller, pending }
     createPluginRegistration(SearchPluginPackage),
     createPluginRegistration(SelectionPluginPackage),
     createPluginRegistration(ExportPluginPackage),
-  ], []);
+    createPluginRegistration(HistoryPluginPackage),
+    createPluginRegistration(AnnotationPluginPackage, { annotationAuthor: author, deactivateToolAfterCreate: false, selectAfterCreate: false }),
+  ], [author]);
 
   if (error) {
     controller.emit('od-error', { code: 'ENGINE_ERROR', message: String(error.message ?? error) });
@@ -74,14 +92,14 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, controller, pending }
       if (pending.current) controller.open?.(pending.current);
     }}
   >
-    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar} controller=${controller} />`}
+    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar} annotate=${annotate} controller=${controller} />`}
   </${EmbedPDF}>`;
 }
 
 /**
- * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, controller: Controller }} props
+ * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, controller: Controller }} props
  */
-function Shell({ documentId, toolbar, sidebar, controller }) {
+function Shell({ documentId, toolbar, sidebar, annotate, controller }) {
   const [showSidebar, setShowSidebar] = useState(sidebar);
   useEffect(() => setShowSidebar(sidebar), [sidebar]);
   if (!documentId) return html`<div class="frame"><p class="message">No document.</p></div>`;
@@ -94,6 +112,8 @@ function Shell({ documentId, toolbar, sidebar, controller }) {
       if (!isLoaded) return html`<div class="frame"><p class="message">Opening…</p></div>`;
       return html`<div class="frame">
         ${toolbar && html`<${Toolbar} documentId=${documentId} showSidebar=${showSidebar} onToggleSidebar=${() => setShowSidebar((s) => !s)} />`}
+        ${toolbar && annotate && html`<${AnnotationTools} documentId=${documentId} />`}
+        <${Changes} documentId=${documentId} controller=${controller} />
         <div class="body">
           ${showSidebar && html`<${Sidebar} documentId=${documentId} />`}
           <${Pages} documentId=${documentId} controller=${controller} />
@@ -154,6 +174,51 @@ function Toolbar({ documentId, showSidebar, onToggleSidebar }) {
 }
 
 /** @param {{ documentId: string }} props */
+function AnnotationTools({ documentId }) {
+  const annotation = useAnnotation(documentId);
+  const { provides: history } = useCapability('history');
+  const active = annotation.state?.activeToolId ?? null;
+  const selected = annotation.state?.selectedUids ?? [];
+  // re-render when the history changes, so undo and redo enable and disable
+  const [, tick] = useState(0);
+  useEffect(() => /** @type {any} */ (history)?.onHistoryChange?.(() => tick((n) => n + 1)), [history]);
+  const h = /** @type {any} */ (history);
+  return html`<div class="bar tools" part="annotation-toolbar" role="toolbar" aria-label="Annotate">
+    <button aria-pressed=${String(active === null)} onClick=${() => annotation.provides?.setActiveTool(null)}>Select</button>
+    ${TOOLS.map(([id, label]) => html`<button data-tool=${id} aria-pressed=${String(active === id)} onClick=${() => annotation.provides?.setActiveTool(active === id ? null : id)}>${label}</button>`)}
+    <span class="grow"></span>
+    <button aria-label="Delete the selected annotation" disabled=${!selected.length} onClick=${() => {
+      const a = /** @type {any} */ (annotation.provides);
+      for (const t of a?.getSelectedAnnotations() ?? []) a.deleteAnnotation(t.object.pageIndex, t.object.id);
+    }}>Delete</button>
+    <button aria-label="Undo" disabled=${!h?.canUndo?.()} onClick=${() => h?.undo()}>Undo</button>
+    <button aria-label="Redo" disabled=${!h?.canRedo?.()} onClick=${() => h?.redo()}>Redo</button>
+  </div>`;
+}
+
+/** Tells the element when annotations change. @param {{ documentId: string, controller: Controller }} props */
+function Changes({ documentId, controller }) {
+  const annotation = useAnnotation(documentId);
+  useEffect(() => {
+    const scope = /** @type {any} */ (annotation.provides);
+    if (!scope?.onAnnotationEvent) return undefined;
+    return scope.onAnnotationEvent((/** @type {any} */ e) => {
+      // EmbedPDF reports a new annotation twice, before and after it is written into the PDF
+      if (e.committed === false) return;
+      if (e.type === 'create' || e.type === 'update' || e.type === 'delete') {
+        const subtype = /** @type {any} */ (PdfAnnotationSubtype)[e.annotation?.type];
+        controller.emit('od-change', {
+          type: e.type,
+          page: (e.pageIndex ?? e.annotation?.pageIndex ?? 0) + 1,
+          annotation: typeof subtype === 'string' ? subtype.toLowerCase() : null,
+        });
+      }
+    });
+  }, [annotation.provides]);
+  return null;
+}
+
+/** @param {{ documentId: string }} props */
 function Sidebar({ documentId }) {
   const scroll = useScroll(documentId);
   return html`<div class="sidebar" part="sidebar">
@@ -179,13 +244,18 @@ function Pages({ documentId, controller }) {
     if (totalPages) controller.emit('od-page', { page: currentPage, pageCount: totalPages });
   }, [currentPage, totalPages]);
   // the viewport measures itself from its own style, so it needs a real size here
-  return html`<${Viewport} documentId=${documentId} class="viewport" style=${{ flex: '1', minWidth: '0', height: '100%', background: 'var(--od-bg)' }}>
-    <${Scroller} documentId=${documentId} renderPage=${(/** @type {any} */ { width, height, pageIndex, scale }) => html`
-      <div class="page" style=${{ width, height }} data-page=${pageIndex + 1}>
-        <${RenderLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${1} />
-        <${TilingLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
-        <${SearchLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
-        <${SelectionLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
-      </div>`} />
-  </${Viewport}>`;
+  // pointer providers hand clicks and drags to whatever tool is active: selecting text,
+  // drawing, placing notes
+  return html`<${GlobalPointerProvider} documentId=${documentId} style=${{ flex: '1', minWidth: '0', height: '100%', display: 'flex' }}>
+    <${Viewport} documentId=${documentId} class="viewport" style=${{ flex: '1', minWidth: '0', height: '100%', background: 'var(--od-bg)' }}>
+      <${Scroller} documentId=${documentId} renderPage=${(/** @type {any} */ { width, height, pageIndex, scale, rotation }) => html`
+        <${PagePointerProvider} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} rotation=${rotation} class="page" style=${{ width, height }} data-page=${pageIndex + 1}>
+          <${RenderLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${1} />
+          <${TilingLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
+          <${SearchLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
+          <${SelectionLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
+          <${AnnotationLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
+        </${PagePointerProvider}>`} />
+    </${Viewport}>
+  </${GlobalPointerProvider}>`;
 }
