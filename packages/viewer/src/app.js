@@ -42,6 +42,7 @@ const html = htm.bind(h);
  * @property {any} [registry]
  * @property {string | null} [documentId]
  * @property {(event: string, detail: object) => void} emit
+ * @property {{ rotate: (page: number, angle: number) => Promise<any>, remove: (page: number) => Promise<any>, move: (from: number, to: number) => Promise<any> }} [organize]
  */
 
 /** The annotation tools offered, in toolbar order: EmbedPDF tool id and label. */
@@ -56,12 +57,14 @@ export const TOOLS = [
 ];
 
 /**
- * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, author: string, controller: Controller, pending: { current: any } }} props
+ * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, author: string, controller: Controller, pending: { current: any } }} props
  */
-export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, author, controller, pending }) {
+export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, author, controller, pending }) {
   // the engine restarts whenever its settings change, so keep the font settings the same object
   const fontFallback = useMemo(() => fontConfig(fontsUrl), [fontsUrl]);
   const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl, worker: true, fontFallback });
+  // a new plugin list restarts the viewer and closes the document, so it depends on the author
+  // only; everything else is decided at render time
   const plugins = useMemo(() => [
     createPluginRegistration(DocumentManagerPluginPackage, {}),
     createPluginRegistration(ViewportPluginPackage, { viewportGap: 12 }),
@@ -70,7 +73,8 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, author, con
     createPluginRegistration(TilingPluginPackage),
     createPluginRegistration(InteractionManagerPluginPackage),
     createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitWidth }),
-    createPluginRegistration(ThumbnailPluginPackage, { width: 110, gap: 10, labelHeight: 16 }),
+    // the label row holds the page number, and the page buttons when organising
+    createPluginRegistration(ThumbnailPluginPackage, { width: 110, gap: 10, labelHeight: 26 }),
     createPluginRegistration(SearchPluginPackage),
     createPluginRegistration(SelectionPluginPackage),
     createPluginRegistration(ExportPluginPackage),
@@ -92,14 +96,14 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, author, con
       if (pending.current) controller.open?.(pending.current);
     }}
   >
-    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar} annotate=${annotate} controller=${controller} />`}
+    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar || organize} annotate=${annotate} organize=${organize} controller=${controller} />`}
   </${EmbedPDF}>`;
 }
 
 /**
- * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, controller: Controller }} props
+ * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, controller: Controller }} props
  */
-function Shell({ documentId, toolbar, sidebar, annotate, controller }) {
+function Shell({ documentId, toolbar, sidebar, annotate, organize, controller }) {
   const [showSidebar, setShowSidebar] = useState(sidebar);
   useEffect(() => setShowSidebar(sidebar), [sidebar]);
   if (!documentId) return html`<div class="frame"><p class="message">No document.</p></div>`;
@@ -115,7 +119,7 @@ function Shell({ documentId, toolbar, sidebar, annotate, controller }) {
         ${toolbar && annotate && html`<${AnnotationTools} documentId=${documentId} />`}
         <${Changes} documentId=${documentId} controller=${controller} />
         <div class="body">
-          ${showSidebar && html`<${Sidebar} documentId=${documentId} />`}
+          ${showSidebar && html`<${Sidebar} documentId=${documentId} organize=${organize} controller=${controller} />`}
           <${Pages} documentId=${documentId} controller=${controller} />
         </div>
       </div>`;
@@ -218,20 +222,67 @@ function Changes({ documentId, controller }) {
   return null;
 }
 
-/** @param {{ documentId: string }} props */
-function Sidebar({ documentId }) {
+/** @param {{ documentId: string, organize: boolean, controller: Controller }} props */
+function Sidebar({ documentId, organize, controller }) {
   const scroll = useScroll(documentId);
-  return html`<div class="sidebar" part="sidebar">
+  const [dragging, setDragging] = useState(/** @type {number | null} */ (null));
+  const [over, setOver] = useState(/** @type {number | null} */ (null));
+  const [busy, setBusy] = useState(false);
+  /** @param {() => Promise<any> | undefined} work */
+  const act = async (work) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await work();
+    } catch (err) {
+      controller.emit('od-error', { code: /** @type {any} */ (err)?.code ?? 'ENGINE_ERROR', message: String(/** @type {any} */ (err)?.message ?? err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return html`<div class=${`sidebar${organize ? ' organize' : ''}${busy ? ' busy' : ''}`} part="sidebar">
     <${ThumbnailsPane} documentId=${documentId} style=${{ height: '100%' }}>
-      ${(/** @type {any} */ m) => html`<div
-        key=${m.pageIndex}
-        class=${`thumb${scroll.state.currentPage === m.pageIndex + 1 ? ' current' : ''}`}
-        style=${{ top: m.top, height: m.wrapperHeight }}
-        onClick=${() => scroll.provides?.scrollToPage({ pageNumber: m.pageIndex + 1 })}
-      >
-        <${ThumbImg} documentId=${documentId} meta=${m} alt=${`Page ${m.pageIndex + 1}`} />
-        <span>${m.pageIndex + 1}</span>
-      </div>`}
+      ${(/** @type {any} */ m) => {
+        const n = m.pageIndex + 1;
+        const cls = `thumb${scroll.state.currentPage === n ? ' current' : ''}${over === n && dragging !== n ? ' drop' : ''}`;
+        return html`<div
+          key=${m.pageIndex}
+          class=${cls}
+          data-thumb=${n}
+          style=${{ top: m.top, height: m.wrapperHeight }}
+          draggable=${organize ? 'true' : 'false'}
+          onClick=${() => scroll.provides?.scrollToPage({ pageNumber: n })}
+          onDragStart=${(/** @type {DragEvent} */ e) => {
+            setDragging(n);
+            e.dataTransfer?.setData('text/plain', String(n));
+          }}
+          onDragOver=${(/** @type {DragEvent} */ e) => {
+            if (dragging === null) return;
+            e.preventDefault();
+            setOver(n);
+          }}
+          onDragLeave=${() => setOver((o) => (o === n ? null : o))}
+          onDrop=${(/** @type {DragEvent} */ e) => {
+            e.preventDefault();
+            const from = dragging;
+            setDragging(null);
+            setOver(null);
+            if (from !== null && from !== n) act(() => controller.organize?.move(from, n));
+          }}
+          onDragEnd=${() => {
+            setDragging(null);
+            setOver(null);
+          }}
+        >
+          <${ThumbImg} documentId=${documentId} meta=${m} alt=${`Page ${n}`} style=${{ width: m.width, height: m.height }} />
+          <div class="thumb-label" onClick=${(/** @type {Event} */ e) => organize && e.stopPropagation()}>
+            ${organize && html`<button aria-label=${`Turn page ${n} left`} onClick=${() => act(() => controller.organize?.rotate(n, -90))}>↺</button>`}
+            <span>${n}</span>
+            ${organize && html`<button aria-label=${`Turn page ${n} right`} onClick=${() => act(() => controller.organize?.rotate(n, 90))}>↻</button>`}
+            ${organize && html`<button aria-label=${`Delete page ${n}`} disabled=${scroll.state.totalPages < 2} onClick=${() => act(() => controller.organize?.remove(n))}>✕</button>`}
+          </div>
+        </div>`;
+      }}
     </${ThumbnailsPane}>
   </div>`;
 }

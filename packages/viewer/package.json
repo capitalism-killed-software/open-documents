@@ -56,12 +56,12 @@
     "@embedpdf/plugin-tiling": "2.14.2",
     "@embedpdf/plugin-viewport": "2.14.2",
     "@embedpdf/plugin-zoom": "2.14.2",
+    "@open-documents/core": "0.0.0",
     "htm": "3.1.1",
     "preact": "10.29.1"
   },
   "devDependencies": {
     "@cantoo/pdf-lib": "2.5.3",
-    "@open-documents/core": "0.0.0",
     "@open-documents/fixtures": "0.0.0",
     "esbuild": "0.27.3",
     "playwright-core": "1.58.2"

@@ -32,7 +32,13 @@ export const STYLES = `
 .thumb { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
 .thumb img { box-shadow: 0 0 0 1px var(--od-line); background: #fff; }
 .thumb.current img { box-shadow: 0 0 0 2px var(--od-accent); }
-.thumb span { font-size: 11px; color: var(--od-muted); margin-top: 2px; }
+.thumb-label { display: flex; align-items: center; gap: 4px; height: 24px; margin-top: 2px; }
+.thumb-label span { font-size: 11px; color: var(--od-muted); min-width: 1.5em; text-align: center; }
+.thumb.drop img { box-shadow: 0 -3px 0 0 var(--od-accent), 0 0 0 1px var(--od-line); }
+.thumb-label button { font: inherit; font-size: 12px; width: 26px; height: 22px; padding: 0; border: 1px solid var(--od-line); border-radius: 4px; background: var(--od-bar); color: var(--od-ink); cursor: pointer; }
+.thumb-label button:disabled { opacity: 0.4; cursor: default; }
+.organize .thumb { cursor: grab; }
+.busy { opacity: 0.6; pointer-events: none; }
 .viewport { flex: 1; min-width: 0; }
 .page { position: relative; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
 /* page images are pictures of the page, not things to drag: a native image drag would cancel

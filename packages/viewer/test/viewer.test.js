@@ -280,3 +280,78 @@ test('annotate: draw with the pen, add a note, undo it, save', { skip }, async (
     await page.close();
   }
 });
+
+/** @param {import('playwright-core').Page} page */
+const savedFrom = async (page) => new Uint8Array(await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save())));
+
+test('organise from code: rotate, delete, move', { skip }, async () => {
+  const { extractText } = await import('@open-documents/core');
+  const firstLines = async (/** @type {Uint8Array} */ b) => (await extractText(b)).map((p) => p.text.split('\n')[0]);
+  const { page } = await open();
+  try {
+    const events = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).rotatePages([2], 90));
+    assert.deepEqual((await inspect(await savedFrom(page))).pages.map((p) => p.rotation), [0, 90, 0, 0, 0]);
+    const after = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).deletePages([3]));
+    assert.deepEqual(after, { pageCount: 4 });
+    assert.deepEqual(await firstLines(await savedFrom(page)), ['Page 1 line 1', 'Page 2 line 1', 'Page 4 line 1', 'Page 5 line 1']);
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).movePage(4, 1));
+    assert.deepEqual(await firstLines(await savedFrom(page)), ['Page 5 line 1', 'Page 1 line 1', 'Page 2 line 1', 'Page 4 line 1']);
+    assert.equal(await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).page), 1, 'shows the page that moved');
+    const kinds = await page.evaluate((list) => list.map((e) => `${e.type}:${e.action}`), events);
+    assert.deepEqual(kinds, ['pages:rotate', 'pages:delete', 'pages:move']);
+  } finally {
+    await page.close();
+  }
+});
+
+test('organise with the thumbnails: buttons and dragging', { skip }, async () => {
+  const { extractText } = await import('@open-documents/core');
+  const { page } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('organize', 'true'));
+    await inViewer(page, 'button[aria-label="Turn page 1 right"]').click();
+    await page.waitForFunction(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      return v.shadowRoot.querySelector('.sidebar:not(.busy)') && v.pageCount === 5;
+    });
+    await page.waitForTimeout(300);
+    assert.equal((await inspect(await savedFrom(page))).pages[0].rotation, 90);
+    await inViewer(page, '[data-thumb="3"]').dragTo(inViewer(page, '[data-thumb="1"]'));
+    await page.waitForFunction(() => !(/** @type {any} */ (document.getElementById('v')).shadowRoot.querySelector('.sidebar.busy')));
+    await page.waitForTimeout(500);
+    const texts = (await extractText(await savedFrom(page))).map((p) => p.text.split('\n')[0]);
+    assert.equal(texts[0], 'Page 3 line 1', `order now ${texts.join(' | ')}`);
+  } finally {
+    await page.close();
+  }
+});
+
+test('annotations move with their page', { skip }, async () => {
+  const { page } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('annotate', 'true'));
+    const made = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await inViewer(page, 'button[data-tool="ink"]').click();
+    const box = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    await page.mouse.move(box.x + 100, box.y + 200);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(box.x + 100 + i * 20, box.y + 220 + (i % 2) * 20);
+    await page.mouse.up();
+    await page.waitForFunction((list) => list.some((c) => c.type === 'create'), made);
+    assert.deepEqual((await annotationsIn(await savedFrom(page)))[0], ['Ink'], 'the stroke is on page 1');
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).movePage(1, 3));
+    const pages = await annotationsIn(await savedFrom(page));
+    assert.deepEqual(pages.map((p) => p.includes('Ink')), [false, false, true, false, false]);
+  } finally {
+    await page.close();
+  }
+});

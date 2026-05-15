@@ -6,18 +6,22 @@
 // ("false" hides it), sidebar ("true" shows page thumbnails at start), annotate ("true" shows
 // the annotation tools), author (written into new annotations).
 // Methods: load(pdf, { password, name }), save(), goToPage(n), zoomIn(), zoomOut(),
-// fitWidth(), search(text), setTool(id), undo(), redo().
+// fitWidth(), search(text), setTool(id), undo(), redo(), rotatePages(pages, angle),
+// deletePages(pages), movePage(from, to).
 // Events: od-load { pageCount, name }, od-page { page, pageCount }, od-change { type, page,
-// annotation }, od-error { code, message }.
+// annotation } for annotations and { type: 'pages', action, pages } for page changes,
+// od-error { code, message }.
+// The organize attribute ("true") adds rotate, delete and drag-to-move to the thumbnails.
 import { h, render } from 'preact';
 import { App } from './app.js';
 import { STYLES } from './styles.js';
 import { ZoomMode } from '@embedpdf/plugin-zoom';
+import * as core from '@open-documents/core';
 
 /** @typedef {Uint8Array | ArrayBuffer | Blob | string | URL} PdfSource */
 
 export class OdViewer extends HTMLElement {
-  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author'];
+  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize'];
 
   constructor() {
     super();
@@ -27,6 +31,11 @@ export class OdViewer extends HTMLElement {
     /** @type {import('./app.js').Controller & { open?: (job: any) => void }} */
     this.controller = { emit: (event, detail) => this.dispatchEvent(new CustomEvent(event, { detail, bubbles: true, composed: true })) };
     this.controller.open = (job) => this.#open(job);
+    this.controller.organize = {
+      rotate: (/** @type {number} */ page, /** @type {number} */ angle) => this.rotatePages([page], angle),
+      remove: (/** @type {number} */ page) => this.deletePages([page]),
+      move: (/** @type {number} */ from, /** @type {number} */ to) => this.movePage(from, to),
+    };
     /** @type {{ page: number, pageCount: number }} */
     this.state = { page: 0, pageCount: 0 };
     this.addEventListener('od-page', (/** @type {any} */ e) => Object.assign(this.state, e.detail));
@@ -142,6 +151,63 @@ export class OdViewer extends HTMLElement {
     this.#capability('history')?.redo();
   }
 
+  /**
+   * Turn pages clockwise (negative for anticlockwise). Annotations come along.
+   *
+   * @param {number[]} pages  from 1
+   * @param {number} angle    a multiple of 90
+   */
+  async rotatePages(pages, angle) {
+    return this.#reshape({ action: 'rotate', pages }, (bytes) => core.rotate(bytes, { angle, pages }), this.page);
+  }
+
+  /** @param {number[]} pages  from 1 */
+  async deletePages(pages) {
+    const stay = Math.min(this.page, this.pageCount - pages.length) || 1;
+    return this.#reshape({ action: 'delete', pages }, (bytes) => core.removePages(bytes, pages), stay);
+  }
+
+  /**
+   * Move one page to another place: movePage(5, 1) makes page 5 the first.
+   *
+   * @param {number} from
+   * @param {number} to
+   */
+  async movePage(from, to) {
+    const count = this.pageCount;
+    const order = Array.from({ length: count }, (_, i) => i + 1).filter((n) => n !== from);
+    order.splice(Math.max(0, Math.min(count - 1, to - 1)), 0, from);
+    if (order.every((n, i) => n === i + 1)) return { pageCount: count };
+    return this.#reshape({ action: 'move', pages: [from, to] }, (bytes) => core.reorder(bytes, order), to);
+  }
+
+  /**
+   * Save what is shown, change it with the library, and show the result where the reader was.
+   *
+   * @param {{ action: string, pages: number[] }} change
+   * @param {(bytes: Uint8Array) => Promise<Uint8Array>} op
+   * @param {number} page  where to be afterwards
+   */
+  async #reshape(change, op, page) {
+    if (!this.#coreReady) {
+      // the same pdfium.wasm the viewer uses, so the browser fetches it once
+      try {
+        core.configure({ wasmUrl: new URL(/** @type {string} */ (this.getAttribute('wasm-url')), document.baseURI).href });
+      } catch {
+        // configured already, by the host page or another viewer
+      }
+      this.#coreReady = true;
+    }
+    const name = this.#name;
+    const result = await this.load(await op(await this.save()), { name });
+    this.goToPage(Math.min(page, result.pageCount));
+    this.controller.emit('od-change', { type: 'pages', ...change });
+    return result;
+  }
+
+  #coreReady = false;
+  #name = 'document.pdf';
+
   #render() {
     const wasm = this.getAttribute('wasm-url');
     if (!wasm) {
@@ -159,6 +225,7 @@ export class OdViewer extends HTMLElement {
           sidebar: this.getAttribute('sidebar') === 'true',
           annotate: this.getAttribute('annotate') === 'true',
           author: this.getAttribute('author') ?? '',
+          organize: this.getAttribute('organize') === 'true',
           controller: this.controller,
           pending: this.pending,
         }),
@@ -183,6 +250,7 @@ export class OdViewer extends HTMLElement {
       const pageCount = /** @type {any} */ (doc).pageCount ?? 0;
       this.state.pageCount = pageCount;
       await this.#settled();
+      this.#name = job.name;
       this.controller.emit('od-load', { pageCount, name: job.name });
       job.done({ pageCount });
     } catch (err) {

@@ -17,7 +17,9 @@ Serve `node_modules/@embedpdf/pdfium/dist/pdfium.wasm` from your site, then:
 
 Pages, thumbnails, zoom, page moves, search with highlights, text selection, and with
 `annotate="true"` a second toolbar for highlights, underlines, strike-outs, pen drawing, text
-boxes, notes and boxes, with undo and redo. `save()` writes them into the PDF.
+boxes, notes and boxes, with undo and redo. With `organize="true"`, the thumbnails get buttons
+to turn and delete pages, and can be dragged to put pages in a new order; annotations go with
+their page. `save()` writes everything into the PDF.
 
 ```js
 const viewer = document.querySelector('od-viewer');
@@ -28,6 +30,7 @@ const matches = await viewer.search('total due');
 const bytes = await viewer.save();                     // the document as PDF bytes
 viewer.setTool('highlight');                           // or 'ink', 'freeText', 'textComment', null
 viewer.undo(); viewer.redo();
+await viewer.rotatePages([2], 90); await viewer.deletePages([4]); await viewer.movePage(5, 1);
 viewer.addEventListener('od-page', (e) => console.log(e.detail.page, e.detail.pageCount));
 viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.annotation));
 ```
@@ -40,11 +43,12 @@ viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.
 | `toolbar` | `"false"` to hide the toolbar |
 | `annotate` | `"true"` to show the annotation tools |
 | `author` | the name written into new annotations |
+| `organize` | `"true"` to turn, delete and move pages from the thumbnails |
 | `fonts-url` | where you serve EmbedPDF's fallback fonts, for files that use Chinese, Japanese, Korean, Arabic or Hebrew fonts without including them. Nothing is fetched from anywhere else. |
 
 Events: `od-load` `{ pageCount, name }`, `od-page` `{ page, pageCount }`,
 `od-change` `{ type, page, annotation }` (`create`, `update` or `delete`; `ink`, `highlight`,
-`text` and so on), `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
+`text` and so on) or `{ type: 'pages', action, pages }` (`rotate`, `delete`, `move`), `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
 `ENGINE_ERROR`).
 
 Style it from outside with `--od-height`, `--od-bg`, `--od-bar`, `--od-ink`, `--od-muted`,
