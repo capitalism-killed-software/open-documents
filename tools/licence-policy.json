@@ -47,5 +47,7 @@
     "nougat-ocr": "weights are non-commercial",
     "sharp": "ships libvips, which is LGPL"
   },
-  "exceptions": {}
+  "exceptions": {
+    "@embedpdf/plugin-form@2.14.2": "MIT: the package ships an MIT LICENSE file (CloudPDF, like the other EmbedPDF packages) but its package.json has no licence field"
+  }
 }
