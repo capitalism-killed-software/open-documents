@@ -7,10 +7,10 @@
 // the annotation tools), author (written into new annotations).
 // Methods: load(pdf, { password, name }), save(), goToPage(n), zoomIn(), zoomOut(),
 // fitWidth(), search(text), setTool(id), undo(), redo(), rotatePages(pages, angle),
-// deletePages(pages), movePage(from, to).
+// deletePages(pages), movePage(from, to), formFields(), getFormValues(), setFormValues(values).
 // Events: od-load { pageCount, name }, od-page { page, pageCount }, od-change { type, page,
-// annotation } for annotations and { type: 'pages', action, pages } for page changes,
-// od-error { code, message }.
+// annotation } for annotations, { type: 'pages', action, pages } for page changes and
+// { type: 'field', page, name, value } for form fields, od-error { code, message }.
 // The organize attribute ("true") adds rotate, delete and drag-to-move to the thumbnails.
 import { h, render } from 'preact';
 import { App } from './app.js';
@@ -149,6 +149,37 @@ export class OdViewer extends HTMLElement {
 
   redo() {
     this.#capability('history')?.redo();
+  }
+
+  /**
+   * The form's fields: name, type, value, readOnly and, for lists, the options.
+   *
+   * @returns {{ name: string, type: number, value: string, readOnly: boolean, options?: object[] }[]}
+   */
+  formFields() {
+    return this.#forms()?.getFormFields() ?? [];
+  }
+
+  /** @returns {Record<string, string>} field name to value; check boxes read as their export value or "Off" */
+  getFormValues() {
+    return this.#forms()?.getFormValues() ?? {};
+  }
+
+  /**
+   * Fill in fields by name. Text fields take text, check boxes their export value (often "Yes")
+   * or "Off", lists one of their options.
+   *
+   * @param {Record<string, string>} values
+   */
+  async setFormValues(values) {
+    const forms = this.#forms();
+    if (!forms) throw new Error('No document is open.');
+    await taskToPromise(forms.setFormValues(values));
+  }
+
+  #forms() {
+    const id = this.controller.documentId;
+    return id ? this.#capability('form')?.forDocument(id) : null;
   }
 
   /**

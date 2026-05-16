@@ -355,3 +355,44 @@ test('annotations move with their page', { skip }, async () => {
     await page.close();
   }
 });
+
+test('forms: read the fields, fill them from code and by typing, save', { skip }, async () => {
+  const { formDocument } = await import('@open-documents/fixtures');
+  const { PDFDocument } = await import('@cantoo/pdf-lib');
+  const page = await /** @type {import('playwright-core').Browser} */ (browser).newPage({ viewport: { width: 900, height: 760 } });
+  try {
+    await page.goto(`${base}/`);
+    const form = await formDocument();
+    await page.evaluate(async (bytes) => /** @type {any} */ (document.getElementById('v')).load(new Uint8Array(bytes), { name: 'form.pdf' }), Array.from(form.bytes));
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).formFields().length === 4);
+    const fields = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).formFields().map((/** @type {any} */ f) => f.name).sort());
+    assert.deepEqual(fields, ['agree', 'colour', 'name', 'notes']);
+    const values = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).getFormValues());
+    assert.equal(values.name, 'Sample Person');
+    assert.equal(values.colour, 'green');
+
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setFormValues({ notes: 'Filled from code', colour: 'blue' }));
+    // typing into the field on the page
+    const input = page.locator('#v >> css=.page[data-page="1"] input:not([type="checkbox"]):not([type="radio"])').first();
+    await input.click();
+    await input.press('Control+a');
+    await input.type('Typed Name');
+    await input.press('Tab');
+    await page.waitForFunction((list) => list.some((c) => c.type === 'field' && c.name === 'name'), changes, { timeout: 5000 }).catch(async () => {
+      throw new Error(`no change for the name field: ${JSON.stringify(await page.evaluate((list) => list, changes))}`);
+    });
+
+    const saved = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const filled = (await PDFDocument.load(new Uint8Array(saved))).getForm();
+    assert.equal(filled.getTextField('notes').getText(), 'Filled from code');
+    assert.deepEqual(filled.getDropdown('colour').getSelected(), ['blue']);
+    assert.equal(filled.getTextField('name').getText(), 'Typed Name');
+  } finally {
+    await page.close();
+  }
+});

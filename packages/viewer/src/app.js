@@ -28,7 +28,9 @@ import { SelectionPluginPackage, SelectionLayer } from '@embedpdf/plugin-selecti
 import { ExportPluginPackage } from '@embedpdf/plugin-export/preact';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history';
 import { AnnotationPluginPackage, AnnotationLayer, useAnnotation } from '@embedpdf/plugin-annotation/preact';
+import { LockModeType } from '@embedpdf/plugin-annotation';
 import { useCapability } from '@embedpdf/core/preact';
+import { FormPluginPackage } from '@embedpdf/plugin-form/preact';
 import { PdfAnnotationSubtype } from '@embedpdf/models';
 import { fontConfig } from './fonts.js';
 
@@ -79,7 +81,15 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, a
     createPluginRegistration(SelectionPluginPackage),
     createPluginRegistration(ExportPluginPackage),
     createPluginRegistration(HistoryPluginPackage),
-    createPluginRegistration(AnnotationPluginPackage, { annotationAuthor: author, deactivateToolAfterCreate: false, selectAfterCreate: false }),
+    createPluginRegistration(AnnotationPluginPackage, {
+      annotationAuthor: author,
+      deactivateToolAfterCreate: false,
+      selectAfterCreate: false,
+      // form fields are for filling in, not for moving about: locking them sends clicks to the field
+      locked: { type: LockModeType.Include, categories: ['form'] },
+    }),
+    // form fields become inputs on the page, drawn by the annotation layer
+    createPluginRegistration(FormPluginPackage),
   ], [author]);
 
   if (error) {
@@ -200,9 +210,18 @@ function AnnotationTools({ documentId }) {
   </div>`;
 }
 
-/** Tells the element when annotations change. @param {{ documentId: string, controller: Controller }} props */
+/** Tells the element when annotations and form fields change. @param {{ documentId: string, controller: Controller }} props */
 function Changes({ documentId, controller }) {
   const annotation = useAnnotation(documentId);
+  const { provides: forms } = useCapability('form');
+  useEffect(() => {
+    const scope = /** @type {any} */ (forms)?.forDocument?.(documentId);
+    if (!scope?.onFieldValueChange) return undefined;
+    return scope.onFieldValueChange((/** @type {any} */ e) => {
+      const field = e.widget?.field;
+      controller.emit('od-change', { type: 'field', page: e.pageIndex + 1, name: field?.name ?? null, value: field?.value ?? null });
+    });
+  }, [forms, documentId]);
   useEffect(() => {
     const scope = /** @type {any} */ (annotation.provides);
     if (!scope?.onAnnotationEvent) return undefined;
