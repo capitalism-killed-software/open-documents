@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
-const packages = process.argv.slice(2).length ? process.argv.slice(2) : ['core', 'node', 'server', 'client'];
+const packages = process.argv.slice(2).length ? process.argv.slice(2) : ['core', 'node', 'server', 'client', 'viewer'];
 
 for (const name of packages) {
   const dir = join(root, 'packages', name);

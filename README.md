@@ -82,14 +82,16 @@ In the browser the engine runs on the page, so files never leave the computer: s
 ## The viewer
 
 A PDF viewer for any web page, as a Web Component, so it works in plain HTML and in every
-front-end framework: pages, thumbnails, zoom, search, text selection.
+front-end framework: pages, thumbnails, zoom, search, text selection, annotations, form filling,
+and turning, deleting and reordering pages.
 
 ```html
 <script type="module">import '@open-documents/viewer';</script>
 <od-viewer src="/contract.pdf" wasm-url="/pdfium.wasm"></od-viewer>
 ```
 
-See [packages/viewer](packages/viewer) and [examples/viewer](examples/viewer), which changes the
+See [packages/viewer](packages/viewer), [docs/frameworks.md](docs/frameworks.md) for React, Vue, Svelte
+and Angular, and [examples/viewer](examples/viewer), which changes the
 document in view with the library and shows the result.
 
 ## Planned
@@ -99,7 +101,7 @@ document in view with the library and shows the result.
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
 - **More:** annotations, forms, OCR, compare, smaller scans (lossy image compression), PDF/A,
   true redaction, digital signatures, fonts beyond Latin
-- **Viewer:** annotations, form filling, a page organiser, signing
+- **Viewer:** signing, redaction, designing forms
 
 ## Develop
 
