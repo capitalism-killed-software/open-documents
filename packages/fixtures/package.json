@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/fixtures",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Generated test documents with known contents. No real documents, ever.",
   "type": "module",

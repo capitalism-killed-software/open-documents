@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Give every published package the same version, and point them at each other exactly.
 // usage: node tools/set-version.js 0.1.0
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -21,5 +21,12 @@ for (const name of names) {
   }
   writeFileSync(file, JSON.stringify(p, null, 2) + '\n');
   console.log(`${p.name} ${version}`);
+}
+// the examples are not published, but they depend on the packages
+for (const name of readdirSync(join(root, 'examples'))) {
+  const file = join(root, 'examples', name, 'package.json');
+  const p = JSON.parse(readFileSync(file, 'utf8'));
+  for (const dep of Object.keys(p.dependencies ?? {})) if (dep.startsWith('@open-documents/')) p.dependencies[dep] = version;
+  writeFileSync(file, JSON.stringify(p, null, 2) + '\n');
 }
 console.log('Now run npm install to update the lockfile.');

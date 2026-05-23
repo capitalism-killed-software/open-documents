@@ -9,7 +9,7 @@
     "start": "node build.js && node ../browser/serve.js dist"
   },
   "dependencies": {
-    "@open-documents/core": "0.0.0",
-    "@open-documents/viewer": "0.0.0"
+    "@open-documents/core": "0.1.0",
+    "@open-documents/viewer": "0.1.0"
   }
 }

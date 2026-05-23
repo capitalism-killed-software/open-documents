@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/client",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Call an Open Documents server from Node or the browser, with the same function names as @open-documents/core.",
   "keywords": [
     "pdf",
@@ -42,9 +42,9 @@
     "fflate": "0.8.2"
   },
   "devDependencies": {
-    "@open-documents/core": "0.0.0",
-    "@open-documents/fixtures": "0.0.0",
-    "@open-documents/node": "0.0.0",
-    "@open-documents/server": "0.0.0"
+    "@open-documents/core": "0.1.0",
+    "@open-documents/fixtures": "0.1.0",
+    "@open-documents/node": "0.1.0",
+    "@open-documents/server": "0.1.0"
   }
 }
