@@ -25,10 +25,8 @@ jobs:
       - run: npm ci
       - run: npm run check:portable
       - name: Publish
-        # npm trusted publishing (OIDC) once each package is set up on npmjs.com;
-        # NPM_TOKEN only for the very first publish, before the packages exist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # npm trusted publishing: npm trades the job's OIDC token for a short-lived one, so
+        # there is no npm token stored anywhere. Each package lists this workflow on npmjs.com.
         run: |
           for p in core node server client cli viewer; do
             npm publish --workspace "@open-documents/$p" --access public --provenance ${{ inputs.dry_run && '--dry-run' || '' }}
