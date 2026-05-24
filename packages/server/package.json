@@ -20,7 +20,7 @@
   "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
   "type": "module",
   "bin": {
-    "opendocs-server": "./bin/opendocs-server.js"
+    "opendocs-server": "bin/opendocs-server.js"
   },
   "types": "./types/index.d.ts",
   "exports": {
