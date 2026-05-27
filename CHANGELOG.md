@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Releases are published from GitHub Actions with npm trusted publishing, so no npm token
+  exists to leak. Each package carries a provenance statement linking it to its commit.
+- The `opendocs` and `opendocs-server` commands are declared the way npm expects, which ends a
+  warning at publish time. Nothing changes for anyone installing them.
+
 ## 0.1.0
 
 The first release. Everything is early: the APIs may change before 1.0.

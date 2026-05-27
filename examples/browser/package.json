@@ -9,6 +9,6 @@
     "start": "node build.js && node serve.js"
   },
   "dependencies": {
-    "@open-documents/core": "0.1.0"
+    "@open-documents/core": "0.1.1"
   }
 }

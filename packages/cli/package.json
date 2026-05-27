@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "opendocs: inspect, render and change PDF files from the command line.",
   "keywords": [
     "pdf",
@@ -34,10 +34,10 @@
     "provenance": true
   },
   "dependencies": {
-    "@open-documents/core": "0.1.0",
-    "@open-documents/node": "0.1.0"
+    "@open-documents/core": "0.1.1",
+    "@open-documents/node": "0.1.1"
   },
   "devDependencies": {
-    "@open-documents/fixtures": "0.1.0"
+    "@open-documents/fixtures": "0.1.1"
   }
 }
