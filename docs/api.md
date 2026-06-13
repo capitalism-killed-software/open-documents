@@ -69,6 +69,7 @@ The standard fonts draw Latin text only; anything else is refused rather than dr
 | `pageNumbers(pdf, { format, start, position, margin })` | `format` uses `{n}` and `{total}`, e.g. `"Page {n} of {total}"`. Counts only the selected pages. |
 | `headerFooter(pdf, { header, footer, start, title })` | Each of `header` and `footer` has `left`, `center` and `right`, using `{n}`, `{total}` and `{title}`. |
 | `bates(pdf, { prefix, suffix, start, digits, position })` | Running labels like `ACME-000123`. |
+| `overlay(pdf, layer, { pages, fit, behind })` | Draw the pages of another PDF on the pages: a letterhead, a background, a template. A one-page layer goes on every page; otherwise one layer page per selected page, in order. `fit`: `"contain"` (default, keeps proportions, centred) or `"stretch"`. `behind: true` puts it under the content; the page's own content moves into a form, which a tagged PDF's structure tree no longer reaches. |
 | `setMetadata(pdf, { title, author, subject, keywords, creator, producer, creationDate, modDate })` | Change the fields given; `null` clears one. |
 | `setBookmarks(pdf, tree)` | Replace the outline. `[]` removes it. |
 

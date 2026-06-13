@@ -63,3 +63,26 @@ export function shownPointToPage(box, quarterTurns, u, v) {
       return [x1 - v, y1 - u];
   }
 }
+
+/**
+ * A point in the page's own coordinates, as shown: the inverse of shownPointToPage.
+ *
+ * @param {Box} box
+ * @param {number} quarterTurns
+ * @param {number} x
+ * @param {number} y
+ * @returns {[number, number]} u from the left edge and v from the top edge, as shown
+ */
+export function pagePointToShown(box, quarterTurns, x, y) {
+  const [x0, y0, x1, y1] = box;
+  switch (((quarterTurns % 4) + 4) % 4) {
+    case 0:
+      return [x - x0, y1 - y];
+    case 1:
+      return [y - y0, x - x0];
+    case 2:
+      return [x1 - x, y - y0];
+    default:
+      return [y1 - y, x1 - x];
+  }
+}

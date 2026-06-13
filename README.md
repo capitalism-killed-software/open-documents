@@ -31,8 +31,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
   their positions; render pages to PNG
 - **Pages:** merge, split, extract, remove, reorder, rotate, slice a page into pieces, crop,
   N-up, insert blank pages
-- **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, metadata,
-  bookmarks
+- **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, letterheads
+  and backgrounds from another PDF (over or under the page), metadata, bookmarks
 - **Security:** AES-256 encryption with permissions, and removing it
 - **Structure:** lossless compression, fast web view, repairing damaged files (needs qpdf)
 - **Convert to PDF:** Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
