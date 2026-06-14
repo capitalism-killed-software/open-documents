@@ -11,7 +11,7 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version ?? '')) {
   process.exit(2);
 }
 const root = fileURLToPath(new URL('../', import.meta.url));
-const names = ['core', 'node', 'server', 'client', 'cli', 'viewer', 'fixtures'];
+const names = ['core', 'node', 'server', 'client', 'cli', 'viewer', 'ocr', 'fixtures'];
 for (const name of names) {
   const file = join(root, 'packages', name, 'package.json');
   const p = JSON.parse(readFileSync(file, 'utf8'));

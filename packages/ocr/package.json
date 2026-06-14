@@ -1,0 +1,57 @@
+{
+  "name": "@open-documents/ocr",
+  "version": "0.1.1",
+  "description": "Make scanned PDFs searchable and read words off page images, in Node or the browser, with Tesseract compiled to WebAssembly.",
+  "keywords": [
+    "pdf",
+    "ocr",
+    "tesseract",
+    "searchable-pdf",
+    "scan"
+  ],
+  "license": "Apache-2.0",
+  "author": "Capitalism Killed Software",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capitalism-killed-software/open-documents.git",
+    "directory": "packages/ocr"
+  },
+  "homepage": "https://github.com/capitalism-killed-software/open-documents/tree/main/packages/ocr#readme",
+  "bugs": "https://github.com/capitalism-killed-software/open-documents/issues",
+  "type": "module",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "imports": {
+    "#platform": {
+      "node": "./src/platform/node.js",
+      "default": "./src/platform/browser.js"
+    }
+  },
+  "files": [
+    "src",
+    "types"
+  ],
+  "scripts": {
+    "prepack": "node ../../tools/build-types.js ocr"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@open-documents/fixtures": "0.1.1"
+  },
+  "dependencies": {
+    "@open-documents/core": "0.1.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "7.0.0"
+  }
+}
