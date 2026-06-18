@@ -383,7 +383,8 @@ test('forms: read the fields, fill them from code and by typing, save', { skip }
     await input.press('Control+a');
     await input.type('Typed Name');
     await input.press('Tab');
-    await page.waitForFunction((list) => list.some((c) => c.type === 'field' && c.name === 'name'), changes, { timeout: 5000 }).catch(async () => {
+    // the field may report a change part way through the typing; wait for the whole value
+    await page.waitForFunction((list) => list.some((c) => c.type === 'field' && c.name === 'name' && c.value === 'Typed Name'), changes, { timeout: 5000 }).catch(async () => {
       throw new Error(`no change for the name field: ${JSON.stringify(await page.evaluate((list) => list, changes))}`);
     });
 
