@@ -113,3 +113,34 @@ Layout options for HTML, Markdown, email and web pages: `format` (`letter`, `a4`
 `background`, `header` and `footer` (HTML, with `pageNumber` and `totalPages` classes).
 
 PDF to Word, Excel and other formats is planned.
+
+## OCR
+
+`@open-documents/ocr` reads text off scanned pages with Tesseract, compiled to WebAssembly, in
+Node and in browsers.
+
+```js
+import { createOcr } from '@open-documents/ocr';
+const reader = await createOcr({ languages: ['eng'], workers: 2 });
+const searchable = await reader.ocr(scan);
+const pages = await reader.recognize(scan, { pages: [1] });
+await reader.close();
+```
+
+`ocr(pdf, options)` and `recognize(pdf, options)` also work on their own; they start and stop
+their own Tesseract, which takes about a second.
+
+| Engine option | What it does |
+|---|---|
+| `languages` | Tesseract codes, default `["eng"]`. English data comes with the package; for others install `@tesseract.js-data/<code>` or use `langPath`. |
+| `workers` | Pages read at the same time, 1 to 16; default 2. Each takes about 100 MB. |
+| `langPath` | A folder (Node) or URL (browser) holding `<code>.traineddata.gz`. |
+| `workerPath`, `corePath` | Browser only, and required there: where you serve `tesseract.js/dist/worker.min.js` and the `tesseract.js-core` folder. Nothing is fetched from a CDN. |
+
+| Method | What it does |
+|---|---|
+| `ocr(pdf, { pages, dpi, force, onPage, password })` | Read the pages that have no text and put what was read back onto them as invisible text, exactly over the words. The pages look the same. A page with 20 or more characters of text counts as having text and is skipped unless `force: true`. `dpi` (100 to 600, default 300) is how finely pages are drawn for reading. `onPage` hears `{ page, skipped, confidence }` as each page is done. Encryption is kept. |
+| `recognize(pdf, { pages, dpi, password })` | The words on each page as `{ page, width, height, text, confidence, words }`, each word `{ text, x, y, width, height, confidence }` in points as shown, confidence 0 to 100. |
+
+Errors add `ENGINE_MISSING` (no data for a language, or a browser without the paths) and
+`CONVERSION_FAILED` (Tesseract could not read a page).

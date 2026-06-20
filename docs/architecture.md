@@ -11,9 +11,10 @@
 | `@open-documents/cli` | Node | The `opendocs` command, a thin layer over core and node. |
 | `@open-documents/fixtures` | tests only | Generated PDFs, Office files, images and email with known contents. No real documents, ever. |
 
+| `@open-documents/ocr` | browser and Node | Tesseract (tesseract.js, WebAssembly) in a small worker pool. Pages are drawn by core, read, and the text goes back on as an invisible layer through core's `overlay`. |
 | `@open-documents/viewer` | browser | `<od-viewer>`, a Web Component on EmbedPDF's headless plugins, laid out with Preact and htm inside a shadow root. |
 
-Planned: a Python worker for PDF to Word, Excel and Markdown, and for OCR.
+Planned: a Python worker for PDF to Markdown, HTML and Excel.
 
 ## Engines
 

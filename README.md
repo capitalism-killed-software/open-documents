@@ -35,6 +35,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
   and backgrounds from another PDF (over or under the page), metadata, bookmarks
 - **Security:** AES-256 encryption with permissions, and removing it
 - **Structure:** lossless compression, fast web view, repairing damaged files (needs qpdf)
+- **OCR:** make scanned PDFs searchable and read words with their positions, in Node or the
+  browser (`@open-documents/ocr`, Tesseract in WebAssembly)
 - **Convert to PDF:** Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
   email (`.eml` and Outlook `.msg`), web pages, JPEG, PNG, TIFF and other images (office files need LibreOffice, web pages
   need Chromium)
@@ -99,7 +101,7 @@ document in view with the library and shows the result.
 - **Edit:** images, links, existing text
 - **To PDF:** EPUB
 - **From PDF:** Word, Excel, PowerPoint, HTML, Markdown, text, images
-- **More:** annotations, forms, OCR, compare, smaller scans (lossy image compression), PDF/A,
+- **More:** annotations, forms, compare, smaller scans (lossy image compression), PDF/A,
   true redaction, digital signatures, fonts beyond Latin
 - **Viewer:** signing, redaction, designing forms
 

@@ -38,6 +38,13 @@ this library, so they are out:
 
 The deny list is in `tools/licence-policy.json`, with a reason next to each entry.
 
+## OCR
+
+`@open-documents/ocr` uses tesseract.js and tesseract.js-core (Apache-2.0), which are Tesseract
+(Apache-2.0) compiled to WebAssembly. The English language data comes from
+`@tesseract.js-data/eng` (the package is MIT; the data inside is Tesseract's own, Apache-2.0).
+tesseract.js runs `opencollective-postinstall` when installed; it only prints a message.
+
 ## The Docker image
 
 The image is a collection of separate programs: our server (Apache-2.0), Node.js, LibreOffice
