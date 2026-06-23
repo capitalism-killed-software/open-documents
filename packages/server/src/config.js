@@ -24,10 +24,16 @@ export function configFromEnv(env) {
   }
   const mb = Number(env.OPENDOCS_MAX_FILE_MB ?? 50);
   if (!(mb > 0)) throw new Error('OPENDOCS_MAX_FILE_MB must be a positive number.');
+  const ocrLanguages = (env.OPENDOCS_OCR_LANGUAGES ?? 'eng').split(/[,+]/).map((l) => l.trim()).filter(Boolean);
+  const ocrWorkers = Number(env.OPENDOCS_OCR_WORKERS ?? 2);
+  if (!Number.isInteger(ocrWorkers) || ocrWorkers < 1 || ocrWorkers > 16) throw new Error('OPENDOCS_OCR_WORKERS must be a whole number from 1 to 16.');
   return {
     host,
     port,
     server: {
+      ocrLanguages,
+      ocrWorkers,
+      ocrLangPath: env.OPENDOCS_OCR_LANG_PATH || undefined,
       apiKeys,
       maxFileSize: Math.round(mb * 1024 * 1024),
       allowUrl: env.OPENDOCS_ALLOW_URL === '1',

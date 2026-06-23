@@ -42,3 +42,11 @@ test('the command stops with a message on a bad setting', async () => {
     return true;
   });
 });
+
+test('ocr settings: languages, workers and a language folder', () => {
+  const plain = configFromEnv({});
+  assert.deepEqual([plain.server.ocrLanguages, plain.server.ocrWorkers, plain.server.ocrLangPath], [['eng'], 2, undefined]);
+  const c = configFromEnv({ OPENDOCS_OCR_LANGUAGES: 'eng+deu, fra', OPENDOCS_OCR_WORKERS: '4', OPENDOCS_OCR_LANG_PATH: '/tessdata' });
+  assert.deepEqual([c.server.ocrLanguages, c.server.ocrWorkers, c.server.ocrLangPath], [['eng', 'deu', 'fra'], 4, '/tessdata']);
+  assert.throws(() => configFromEnv({ OPENDOCS_OCR_WORKERS: '0' }), /OPENDOCS_OCR_WORKERS/);
+});

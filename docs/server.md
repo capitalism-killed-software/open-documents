@@ -41,6 +41,9 @@ npx opendocs-server           # listens on 127.0.0.1:3000
 | `OPENDOCS_SOFFICE` | found on the PATH | Path to LibreOffice's `soffice`. |
 | `OPENDOCS_CHROMIUM` | Playwright's build | Path to a Chromium executable. |
 | `OPENDOCS_QPDF` | found on the PATH | Path to `qpdf`. |
+| `OPENDOCS_OCR_LANGUAGES` | `eng` | What OCR reads, comma-separated Tesseract codes such as `eng,deu`. Each needs its data: the `@tesseract.js-data/<code>` package, or a file in `OPENDOCS_OCR_LANG_PATH`. Requests cannot add languages. |
+| `OPENDOCS_OCR_WORKERS` | `2` | Pages read at the same time. Each takes about 100 MB. |
+| `OPENDOCS_OCR_LANG_PATH` | the npm packages | A folder holding `<code>.traineddata.gz` files. |
 | `OPENDOCS_WORK_DIR` | the system temp folder | Where LibreOffice profiles and job files go. |
 | `OPENDOCS_LOG` | `info` | Log level, or `0` for none. |
 
@@ -63,6 +66,9 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `merge` (several files; `items` in options gives each one `pages` or `password`), `extract-pages`, `remove-pages`, `reorder`, `rotate`, `slice`, `crop`, `n-up`, `insert-blank-pages` | PDF |
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
+| `overlay` (two files: the document, then the layer; `pages`, `fit`, `behind`) | PDF |
+| `ocr` (`pages`, `dpi`, `force`) | PDF with the scanned pages made searchable. OCR starts on the first request, which takes a second longer. |
+| `recognize` (`pages`, `dpi`) | JSON: the words read on each page, with positions and confidence |
 | `encrypt`, `decrypt` | PDF |
 | `compress` (lossless), `linearize` (fast web view), `repair` | PDF; these need qpdf, which the image includes |
 | `images-to-pdf` (several JPEG or PNG files) | PDF |

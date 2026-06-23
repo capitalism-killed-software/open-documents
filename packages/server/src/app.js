@@ -6,6 +6,7 @@ import multipart from '@fastify/multipart';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { OpenDocumentsError } from '@open-documents/core';
 import { createConverter } from '@open-documents/node';
+import { createOcr } from '@open-documents/ocr';
 import { OPERATIONS } from './operations.js';
 import { createJobs } from './jobs.js';
 import { checkWebhook, deliver } from './webhooks.js';
@@ -36,6 +37,10 @@ const STATUS = {
  * @property {number[]} [webhookDelays]  retry delays in milliseconds
  * @property {{ ttl?: number, concurrency?: number, maxJobs?: number }} [jobs]
  * @property {any} [converter]  from createConverter() in @open-documents/node; made on first use if left out
+ * @property {string[]} [ocrLanguages]  what OCR reads, e.g. ["eng", "deu"]; default ["eng"]
+ * @property {number} [ocrWorkers]      pages read at once; default 2
+ * @property {string} [ocrLangPath]     folder of <code>.traineddata.gz files, instead of the npm packages
+ * @property {any} [ocr]  from createOcr() in @open-documents/ocr; started on first use if left out
  * @property {boolean | object} [logger]
  */
 
@@ -45,6 +50,21 @@ const STATUS = {
 export async function buildServer(options = {}) {
   const maxFileSize = options.maxFileSize ?? 50 * 1024 * 1024;
   const converter = options.converter ?? createConverter();
+  const ocrLanguages = options.ocrLanguages ?? ['eng'];
+  /** @type {Promise<any> | undefined} */
+  let ocrEngine;
+  /** @param {Record<string, any>} o */
+  const ocr = async (o) => {
+    if (o.languages !== undefined && (!Array.isArray(o.languages) || !o.languages.every((l) => ocrLanguages.includes(l)))) {
+      throw new OpenDocumentsError('INVALID_OPTION', `This server reads ${ocrLanguages.join(', ')}. Languages are chosen when it starts (OPENDOCS_OCR_LANGUAGES).`);
+    }
+    if (options.ocr) return options.ocr;
+    ocrEngine ??= createOcr({ languages: ocrLanguages, workers: options.ocrWorkers, langPath: options.ocrLangPath }).catch((e) => {
+      ocrEngine = undefined;
+      throw e;
+    });
+    return ocrEngine;
+  };
   const keys = (options.apiKeys ?? []).filter(Boolean).map((k) => createHash('sha256').update(k).digest());
 
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: Math.min(maxFileSize, 20 * 1024 * 1024) });
@@ -115,6 +135,8 @@ export async function buildServer(options = {}) {
   app.addHook('onClose', async () => {
     jobs.close();
     if (!options.converter) await converter.close();
+    const started = await ocrEngine?.catch(() => null);
+    await started?.close();
   });
 
   app.get('/v1/jobs/:id', async (req, reply) => {
@@ -150,7 +172,7 @@ export async function buildServer(options = {}) {
     const { files, options: { webhook, ...opts } } = await readForm(req);
     if (!files.length) throw new OpenDocumentsError('INVALID_INPUT', 'Upload the file as multipart form data.');
     if (op.files === 'one' && files.length > 1) throw new OpenDocumentsError('INVALID_INPUT', `${name} takes one file.`);
-    return respond(req, reply, () => op.run(files.map((f) => f.data), opts, { converter }), webhook);
+    return respond(req, reply, () => op.run(files.map((f) => f.data), opts, { converter, ocr }), webhook);
   });
 
   app.post('/v1/convert', async (req, reply) => {

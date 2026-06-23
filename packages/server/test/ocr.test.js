@@ -1,0 +1,92 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
+import { textDocument } from '@open-documents/fixtures';
+import { renderPages, imagesToPdf, extractText } from '@open-documents/core';
+import { buildServer } from '../src/index.js';
+import { form } from './helpers.js';
+
+const doc = await textDocument({ pages: 1 });
+const scan = await imagesToPdf((await renderPages(doc.bytes, { dpi: 200 })).map((p) => p.data), { pageSize: 'fit', dpi: 200 });
+const app = await buildServer({ ocrWorkers: 1 });
+after(() => app.close());
+
+/**
+ * @param {string} operation
+ * @param {Uint8Array[]} files
+ * @param {object} [options]
+ */
+async function post(operation, files, options) {
+  const body = await form(files.map((data, i) => ({ filename: `${i}.pdf`, data })), options);
+  return app.inject({ method: 'POST', url: `/v1/pdf/${operation}`, ...body });
+}
+
+test('ocr makes a scan searchable', async () => {
+  const res = await post('ocr', [scan]);
+  assert.equal(res.statusCode, 200, res.body);
+  assert.equal(res.headers['content-type'], 'application/pdf');
+  const [page] = await extractText(new Uint8Array(res.rawPayload));
+  assert.match(page.text, /quick brown fox/);
+});
+
+test('recognize answers with the words and where they are', async () => {
+  const res = await post('recognize', [scan], { dpi: 150 });
+  assert.equal(res.statusCode, 200, res.body);
+  const [page] = res.json();
+  assert.match(page.text, /quick brown fox/);
+  assert.ok(page.words.some((/** @type {any} */ w) => w.text === 'fox' && w.confidence > 50));
+});
+
+test('only the languages the server was started with', async () => {
+  const fine = await post('recognize', [scan], { languages: ['eng'], pages: [1] });
+  assert.equal(fine.statusCode, 200);
+  const other = await post('ocr', [scan], { languages: ['deu'] });
+  assert.deepEqual([other.statusCode, other.json().error.code], [400, 'INVALID_OPTION']);
+  assert.match(other.json().error.message, /OPENDOCS_OCR_LANGUAGES/);
+  const bad = await post('ocr', [scan], { languages: 'eng' });
+  assert.equal(bad.statusCode, 400);
+});
+
+test('an engine handed in is used, and left open for its owner', async () => {
+  /** @type {string[]} */
+  const calls = [];
+  const engine = {
+    ocr: async (/** @type {Uint8Array} */ b, /** @type {any} */ o) => { calls.push(`ocr ${JSON.stringify(o)}`); return b; },
+    recognize: async () => { calls.push('recognize'); return []; },
+    close: async () => { calls.push('close'); },
+  };
+  const own = await buildServer({ ocr: engine });
+  try {
+    const body = await form([{ filename: 'a.pdf', data: scan }], { force: true, dpi: 200, onPage: 'ignored', workers: 9 });
+    assert.equal((await own.inject({ method: 'POST', url: '/v1/pdf/ocr', ...body })).statusCode, 200);
+    const words = await form([{ filename: 'a.pdf', data: scan }], { force: true });
+    assert.deepEqual((await own.inject({ method: 'POST', url: '/v1/pdf/recognize', ...words })).json(), []);
+  } finally {
+    await own.close();
+  }
+  assert.deepEqual(calls, ['ocr {"dpi":200,"force":true}', 'recognize']);
+});
+
+test('an engine that cannot start is tried again on the next request', async () => {
+  const broken = await buildServer({ ocrLangPath: '/nowhere' });
+  try {
+    for (let i = 0; i < 2; i++) {
+      const res = await broken.inject({ method: 'POST', url: '/v1/pdf/ocr', ...(await form([{ filename: 'a.pdf', data: scan }])) });
+      assert.deepEqual([res.statusCode, res.json().error.code], [501, 'ENGINE_MISSING']);
+    }
+  } finally {
+    await broken.close();
+  }
+});
+
+test('overlay takes the document, then the layer', async () => {
+  const layer = await PDFDocument.create();
+  const font = await layer.embedFont(StandardFonts.Helvetica);
+  layer.addPage([612, 792]).drawText('LETTERHEAD', { x: 40, y: 760, size: 12, font });
+  const res = await post('overlay', [doc.bytes, await layer.save()], { fit: 'stretch' });
+  assert.equal(res.statusCode, 200, res.body);
+  const [page] = await extractText(new Uint8Array(res.rawPayload));
+  assert.match(page.text, /LETTERHEAD/);
+  const one = await post('overlay', [doc.bytes]);
+  assert.deepEqual([one.statusCode, one.json().error.code], [400, 'INVALID_INPUT']);
+});

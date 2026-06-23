@@ -5,7 +5,9 @@ import { zipSync } from 'fflate';
 
 /**
  * @typedef {{ type: string, body: Uint8Array | object, filename?: string }} Reply
- * @typedef {{ converter: any }} Context  converter: from createConverter() in @open-documents/node
+ * @typedef {{ converter: any, ocr: (options: Record<string, any>) => Promise<any> }} Context
+ *   converter: from createConverter() in @open-documents/node; ocr: the server's OCR engine from
+ *   createOcr() in @open-documents/ocr, started on first use
  * @typedef {{ files: 'one' | 'many', run: (files: Uint8Array[], options: Record<string, any>, ctx: Context) => Promise<Reply> }} Operation
  */
 
@@ -65,6 +67,13 @@ export const OPERATIONS = {
   bates: { files: 'one', run: async ([f], o) => pdf(await od.bates(f, o)) },
   metadata: { files: 'one', run: async ([f], o) => pdf(await od.setMetadata(f, o)) },
   'set-bookmarks': { files: 'one', run: async ([f], o) => pdf(await od.setBookmarks(f, o.bookmarks, o)) },
+  overlay: {
+    files: 'many',
+    run: async (files, o) => {
+      if (files.length !== 2) throw new od.OpenDocumentsError('INVALID_INPUT', 'overlay takes two files: the document, then the layer.');
+      return pdf(await od.overlay(files[0], files[1], o));
+    },
+  },
 
   // security
   encrypt: { files: 'one', run: async ([f], o) => pdf(await od.encrypt(f, /** @type {any} */ (o))) },
@@ -75,6 +84,20 @@ export const OPERATIONS = {
   linearize: { files: 'one', run: async ([f], o, ctx) => pdf(await ctx.converter.linearize(f, o)) },
   repair: { files: 'one', run: async ([f], o, ctx) => pdf(await ctx.converter.repair(f, o)) },
 
+  // OCR, with Tesseract
+  ocr: { files: 'one', run: async ([f], o, ctx) => pdf(await (await ctx.ocr(o)).ocr(f, pageOptions(o, true))) },
+  recognize: { files: 'one', run: async ([f], o, ctx) => json(await (await ctx.ocr(o)).recognize(f, pageOptions(o, false))) },
+
   // building
   'images-to-pdf': { files: 'many', run: async (files, o) => pdf(await od.imagesToPdf(files, o)) },
 };
+
+/**
+ * Only the options OCR takes from a request; callbacks and engine settings stay on the server.
+ *
+ * @param {Record<string, any>} o
+ * @param {boolean} force  whether `force` applies
+ */
+function pageOptions(o, force) {
+  return { pages: o.pages, dpi: o.dpi, password: o.password, ...(force ? { force: o.force } : {}) };
+}
