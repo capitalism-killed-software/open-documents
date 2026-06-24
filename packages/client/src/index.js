@@ -135,12 +135,17 @@ export function createClient(options) {
     setMetadata: one('metadata'),
     /** @param {Input} input @param {object[]} bookmarks */
     setBookmarks: (input, bookmarks, opts = {}) => run('set-bookmarks', input, { ...opts, bookmarks }),
+    /** @param {Input} input @param {Input} layer */
+    overlay: (input, layer, opts = {}) => run('overlay', [input, layer], opts),
     encrypt: one('encrypt'),
     decrypt: one('decrypt'),
     // structure (needs qpdf on the server)
     compress: one('compress'),
     linearize: one('linearize'),
     repair: one('repair'),
+    // OCR (the server reads the languages it was started with)
+    ocr: one('ocr'),
+    recognize: one('recognize'),
     /** @param {Input[]} images */
     imagesToPdf: (images, opts = {}) => run('images-to-pdf', images, opts),
     // convert

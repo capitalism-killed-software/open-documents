@@ -87,3 +87,14 @@ test('compress over http', async (t) => {
   assert.equal((await inspect(await client.repair(big.bytes))).pageCount, 40);
   assert.match(new TextDecoder('latin1').decode((await client.linearize(doc.bytes)).subarray(0, 1024)), /\/Linearized/);
 });
+
+test('overlay, ocr and recognize', async () => {
+  const { renderPages, imagesToPdf } = await import('@open-documents/core');
+  const scan = await imagesToPdf((await renderPages(doc.bytes, { pages: [1], dpi: 200 })).map((p) => p.data), { pageSize: 'fit', dpi: 200 });
+  const searchable = await client.ocr(scan);
+  assert.match((await extractText(searchable))[0].text, /Page 1/);
+  const [page] = await client.recognize(scan, { dpi: 150 });
+  assert.ok(page.words.some((/** @type {{ text: string }} */ w) => w.text === 'Page'));
+  const layered = await client.overlay(doc.bytes, scan, { pages: [2], behind: true });
+  assert.equal((await inspect(layered)).pageCount, 3);
+});
