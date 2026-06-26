@@ -248,3 +248,38 @@ test('compress, linearize and repair', async (t) => {
   assert.match((await run(['linearize', pdf, '-o', o('l.pdf')])).out, /l\.pdf {2}3 pages/);
   assert.match((await run(['repair', pdf, '-o', o('r2.pdf')])).out, /r2\.pdf {2}3 pages/);
 });
+
+test('overlay puts a layer on the pages', async () => {
+  const layer = join(dir, 'layer.pdf');
+  await writeFile(layer, (await textDocument({ pages: 1, lines: () => ['LETTERHEAD'] })).bytes);
+  const out = join(dir, 'with-layer.pdf');
+  const { code } = await run(['overlay', pdf, '--layer', layer, '--pages', '1', '-o', out]);
+  assert.equal(code, 0);
+  const [one, two] = await extractText(await readFile(out));
+  assert.match(one.text, /LETTERHEAD/);
+  assert.doesNotMatch(two.text, /LETTERHEAD/);
+  const missing = await run(['overlay', pdf]);
+  assert.deepEqual([missing.code, missing.err], [1, 'error: opendocs overlay needs --layer.\n']);
+});
+
+test('ocr makes a scan searchable and says what it did with each page', async () => {
+  const { renderPages, imagesToPdf, merge } = await import('@open-documents/core');
+  const original = await textDocument({ pages: 1 });
+  const scanned = await imagesToPdf((await renderPages(original.bytes, { dpi: 200 })).map((p) => p.data), { pageSize: 'fit', dpi: 200 });
+  const file = join(dir, 'scan.pdf');
+  await writeFile(file, await merge([scanned, original.bytes]));
+  const out = join(dir, 'scan-searchable.pdf');
+  const { code, out: said } = await run(['ocr', file, '--lang', 'eng', '-o', out]);
+  assert.equal(code, 0);
+  assert.match(said, /^page 1: read, \d+% sure$/m);
+  assert.match(said, /^page 2: has text already, left alone$/m);
+  assert.match((await extractText(await readFile(out)))[0].text, /quick brown fox/);
+
+  const json = await run(['ocr', file, '--json', '--pages', '1', '--dpi', '150']);
+  assert.equal(json.code, 0);
+  assert.ok(JSON.parse(json.out)[0].words.some((/** @type {{ text: string }} */ w) => w.text === 'fox'));
+
+  const unknown = await run(['ocr', file, '--lang', 'klingon']);
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.err, /@tesseract\.js-data\/klingon/);
+});

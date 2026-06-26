@@ -11,5 +11,6 @@ opendocs slice scan.pdf --columns 2
 opendocs watermark both.pdf --text DRAFT
 opendocs convert report.docx            # needs LibreOffice
 opendocs compress big.pdf               # needs qpdf
+opendocs ocr scan.pdf                   # make a scan searchable
 opendocs --help
 ```

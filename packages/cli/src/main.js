@@ -33,6 +33,11 @@ Structure (needs qpdf):
   opendocs linearize <file.pdf>    fast web view
   opendocs repair <file.pdf>       rebuild a damaged file
 
+OCR (English comes with it; for others, npm install @tesseract.js-data/<code>):
+  opendocs ocr <file.pdf> [--lang eng+deu] [--pages ...] [--dpi 300] [--force]
+                                   make scanned pages searchable
+  opendocs ocr <file.pdf> --json   print the words read, with positions, instead
+
 Edit (each writes a new file; -o names it):
   opendocs stamp <file.pdf> --text "..." [--position top-right | --at x,y] [--size N]
   opendocs watermark <file.pdf> --text DRAFT [--color #ff0000] [--opacity 0.25] [--angle 45] [--behind]
@@ -40,6 +45,7 @@ Edit (each writes a new file; -o names it):
   opendocs header-footer <file.pdf> [--header "left|center|right"] [--footer "left|center|right"]
   opendocs bates <file.pdf> [--prefix ACME-] [--start N] [--digits 6]
   opendocs meta <file.pdf> [--title ...] [--author ...] [--subject ...] [--keywords ...]
+  opendocs overlay <file.pdf> --layer letterhead.pdf [--behind] [--fit contain|stretch] [--pages ...]
   opendocs bookmarks <file.pdf> [--json]
   opendocs encrypt <file.pdf> [--user-password pw] [--owner-password pw] [--no-print] [--no-copy] [--no-modify]
   opendocs decrypt <file.pdf> --password pw
@@ -110,6 +116,10 @@ const OPTIONS = {
   paper: { type: 'string' },
   landscape: { type: 'boolean' },
   javascript: { type: 'boolean' },
+  layer: { type: 'string' },
+  fit: { type: 'string' },
+  lang: { type: 'string' },
+  force: { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -200,6 +210,14 @@ const COMMANDS = {
       return change(ctx, async (bytes, pw) => od.setMetadata(bytes, { ...pw, ...fields }));
     },
   },
+  overlay: {
+    files: 'one',
+    run: async (ctx) => {
+      const layer = await readFile(required(ctx, 'layer'));
+      return change(ctx, (bytes, pw) => od.overlay(bytes, layer, { ...pw, pages: ctx.values.pages, fit: ctx.values.fit, behind: ctx.values.behind }));
+    },
+  },
+  ocr: { files: 'one', run: ocr },
   bookmarks: { files: 'one', run: bookmarks },
   encrypt: {
     files: 'one',
@@ -347,6 +365,39 @@ async function render({ files, values, io }) {
 async function text({ files, values, io }) {
   const result = await od.extractText(await readFile(files[0]), { pages: values.pages, password: values.password });
   io.out(result.map((p) => p.text).join('\n\f') + '\n');
+}
+
+/** @param {Context} ctx */
+async function ocr(ctx) {
+  const { files, values, io } = ctx;
+  // loaded only here: Tesseract is large and the other commands never need it
+  const { createOcr } = await import('@open-documents/ocr');
+  const dpi = values.dpi === undefined ? undefined : integer(values.dpi, '--dpi');
+  const engine = await createOcr({ languages: values.lang?.split(/[+,]/) });
+  try {
+    if (values.json) {
+      const pages = await engine.recognize(await readFile(files[0]), { pages: values.pages, dpi, password: values.password });
+      io.out(`${JSON.stringify(pages, null, 2)}\n`);
+      return;
+    }
+    /** @type {string[]} */
+    const lines = [];
+    await change(ctx, async (bytes, pw) => {
+      const out = await engine.ocr(bytes, {
+        ...pw,
+        pages: values.pages,
+        dpi,
+        force: values.force,
+        onPage: (r) => {
+          lines[r.page] = r.skipped ? `page ${r.page}: has text already, left alone` : `page ${r.page}: read, ${Math.round(/** @type {number} */ (r.confidence))}% sure`;
+        },
+      });
+      io.out(lines.filter(Boolean).join('\n') + '\n');
+      return out;
+    });
+  } finally {
+    await engine.close();
+  }
 }
 
 /** @param {Context} ctx */

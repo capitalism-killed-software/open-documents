@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "@open-documents/core": "0.1.1",
-    "@open-documents/node": "0.1.1"
+    "@open-documents/node": "0.1.1",
+    "@open-documents/ocr": "0.1.1"
   },
   "devDependencies": {
     "@open-documents/fixtures": "0.1.1"
