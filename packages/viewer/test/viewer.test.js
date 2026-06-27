@@ -393,6 +393,9 @@ test('forms: read the fields, fill them from code and by typing, save', { skip }
     assert.equal(filled.getTextField('notes').getText(), 'Filled from code');
     assert.deepEqual(filled.getDropdown('colour').getSelected(), ['blue']);
     assert.equal(filled.getTextField('name').getText(), 'Typed Name');
+    // keystrokes are written in order, so the last change reported is the whole value
+    const names = await page.evaluate((list) => list.filter((c) => c.type === 'field' && c.name === 'name').map((c) => c.value), changes);
+    assert.equal(names.at(-1), 'Typed Name', JSON.stringify(names));
   } finally {
     await page.close();
   }

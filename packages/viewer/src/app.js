@@ -30,6 +30,7 @@ import { HistoryPluginPackage } from '@embedpdf/plugin-history';
 import { AnnotationPluginPackage, AnnotationLayer, useAnnotation } from '@embedpdf/plugin-annotation/preact';
 import { LockModeType } from '@embedpdf/plugin-annotation';
 import { useCapability } from '@embedpdf/core/preact';
+import { serializeFormWrites } from './form-writes.js';
 import { FormPluginPackage } from '@embedpdf/plugin-form/preact';
 import { PdfAnnotationSubtype } from '@embedpdf/models';
 import { fontConfig } from './fonts.js';
@@ -103,6 +104,7 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, a
     plugins=${plugins}
     onInitialized=${async (/** @type {any} */ registry) => {
       controller.registry = registry;
+      serializeFormWrites(registry.getPlugin?.('form'));
       if (pending.current) controller.open?.(pending.current);
     }}
   >
