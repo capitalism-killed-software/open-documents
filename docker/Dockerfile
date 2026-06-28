@@ -27,6 +27,7 @@ COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/node/package.json packages/node/
 COPY packages/server/package.json packages/server/
+COPY packages/ocr/package.json packages/ocr/
 COPY packages/cli/package.json packages/cli/
 COPY packages/fixtures/package.json packages/fixtures/
 COPY examples/browser/package.json examples/browser/
@@ -38,6 +39,7 @@ RUN npm ci --omit=dev --workspace @open-documents/server --include-workspace-roo
 COPY packages/core packages/core
 COPY packages/node packages/node
 COPY packages/server packages/server
+COPY packages/ocr packages/ocr
 
 USER node
 ENV HOST=0.0.0.0 \

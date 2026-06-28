@@ -47,6 +47,12 @@ head -c 5 "$work/small.pdf" | grep -q '%PDF-'
 echo "== text from the converted docx"
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/report.pdf" http://127.0.0.1:3000/v1/pdf/text | grep -q 'Quarterly Report'
 
+echo "== ocr: a page drawn to an image, then made searchable again"
+curl -fsS -H "authorization: Bearer $key" -F file=@"$work/doc.pdf" -F 'options={"pages":[1],"dpi":200}' http://127.0.0.1:3000/v1/pdf/render -o "$work/page.png"
+curl -fsS -H "authorization: Bearer $key" -F file=@"$work/page.png" -F 'options={"pageSize":"fit","dpi":200}' http://127.0.0.1:3000/v1/pdf/images-to-pdf -o "$work/scan.pdf"
+curl -fsS -H "authorization: Bearer $key" -F file=@"$work/scan.pdf" http://127.0.0.1:3000/v1/pdf/ocr -o "$work/searchable.pdf"
+curl -fsS -H "authorization: Bearer $key" -F file=@"$work/searchable.pdf" http://127.0.0.1:3000/v1/pdf/text | grep -q 'quick brown fox'
+
 echo "== packages we never ship"
 if docker run --rm --entrypoint dpkg-query "$image" -W -f '${Package}\n' | grep -E '^(ghostscript|libgs[0-9]|mupdf|libmupdf|imagemagick|graphicsmagick|poppler-utils|pandoc)'; then
   echo "found a package that must not be in the image"; exit 1
