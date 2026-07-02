@@ -83,7 +83,7 @@ export async function extractWords(input, options = {}) {
  * @param {number} page
  * @returns {number} the rotation it had, in quarter turns
  */
-function unrotate(pdf, page) {
+export function unrotate(pdf, page) {
   const rotation = pdf.fn.FPDFPage_GetRotation(page);
   if (rotation) pdf.fn.FPDFPage_SetRotation(page, 0);
   return rotation;
@@ -100,6 +100,8 @@ function unrotate(pdf, page) {
  * @property {number} v      position across it (the baseline)
  * @property {number} along  how far the character reaches along the direction
  * @property {number} across how tall it is across the direction
+ * @property {number} index  PDFium's character index, for asking about its font and colour
+ * @property {[number, number]} origin  where its baseline starts, in page coordinates
  */
 
 /**
@@ -115,7 +117,7 @@ function unrotate(pdf, page) {
  * @param {number} textPage
  * @returns {Glyph[][][]} lines, of words, of characters
  */
-function layout(pdf, textPage) {
+export function layout(pdf, textPage) {
   const { fn } = pdf;
   const count = fn.FPDFText_CountChars(textPage);
   const ptr = pdf.malloc(6 * 8 + 4 * 4); // four doubles for the ink box, two for the origin, four floats for the advance box
@@ -173,6 +175,8 @@ function layout(pdf, textPage) {
         v: -ox * sin + oy * cos,
         along: Math.abs(w * cos) + Math.abs(h * sin),
         across: Math.abs(w * sin) + Math.abs(h * cos),
+        index: i,
+        origin: [ox, oy],
       };
       if (last) {
         if (gap === 'line' && sameBaseline(last, glyph)) {

@@ -98,26 +98,44 @@ async function render(input, pages, options) {
         fail('INVALID_OPTION', `A ${width} x ${height} render is over the ${maxPixels} pixel limit. Lower the dpi or raise maxPixels.`);
       }
 
-      const bitmap = fn.FPDFBitmap_Create(width, height, 1);
-      if (!bitmap) fail('ENGINE_ERROR', 'Out of engine memory for the page image.');
-      try {
-        // FillRect writes BGRA order even when rendering in RGBA, so swap red and blue here
-        fn.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, swapRedBlue(background));
-        fn.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, flags);
-        const rgba = copyPixels(pdf, bitmap, width, height);
-        return {
-          page: number,
-          width,
-          height,
-          format,
-          data: format === 'png' ? encodePng(rgba, width, height) : rgba,
-        };
-      } finally {
-        fn.FPDFBitmap_Destroy(bitmap);
-      }
+      const rgba = drawPage(pdf, page, width, height, flags, background);
+      return {
+        page: number,
+        width,
+        height,
+        format,
+        data: format === 'png' ? encodePng(rgba, width, height) : rgba,
+      };
     }));
   });
 }
+
+/**
+ * Draw a loaded page, as shown, into RGBA pixels.
+ *
+ * @param {import('./engine/pdfium.js').Engine} pdf
+ * @param {number} page
+ * @param {number} width   pixels
+ * @param {number} height  pixels
+ * @param {number} flags   FPDF_RenderPageBitmap flags; RGBA order is always added
+ * @param {number} background  ARGB
+ * @returns {Uint8Array}
+ */
+export function drawPage(pdf, page, width, height, flags, background) {
+  const { fn } = pdf;
+  const bitmap = fn.FPDFBitmap_Create(width, height, 1);
+  if (!bitmap) fail('ENGINE_ERROR', 'Out of engine memory for the page image.');
+  try {
+    // FillRect writes BGRA order even when rendering in RGBA, so swap red and blue here
+    fn.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, swapRedBlue(background));
+    fn.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, flags | FPDF_REVERSE_BYTE_ORDER);
+    return copyPixels(pdf, bitmap, width, height);
+  } finally {
+    fn.FPDFBitmap_Destroy(bitmap);
+  }
+}
+
+export { FPDF_ANNOT };
 
 /** @param {number} argb */
 function swapRedBlue(argb) {
