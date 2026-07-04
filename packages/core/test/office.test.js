@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
 import { PDFDocument, StandardFonts, rgb, TextRenderingMode, setTextRenderingMode, pushGraphicsState, popGraphicsState } from '@cantoo/pdf-lib';
 import { textDocument, pngImage } from '@open-documents/fixtures';
-import { toDocx } from '../src/index.js';
+import { toDocx, toPptx, merge } from '../src/index.js';
 import { fontFace } from '../src/convert/layout.js';
 
 /** @param {Uint8Array} zip */
@@ -105,6 +105,7 @@ test('a scan with a text layer gets its words, and the picture only when asked',
 test('the same file always gives the same bytes', async () => {
   const pdf = await styled({ rectangle: true });
   assert.deepEqual(await toDocx(pdf), await toDocx(pdf));
+  assert.deepEqual(await toPptx(pdf), await toPptx(pdf));
 });
 
 test('pages bigger than Word allows are scaled down to fit', async () => {
@@ -113,7 +114,25 @@ test('pages bigger than Word allows are scaled down to fit', async () => {
   assert.deepEqual([Number(w), Number(h)], [31680, 21120]);
 });
 
+test('pptx: one slide per page, sized by the first page, other sizes fitted in', async () => {
+  const a4 = await textDocument({ pages: 1, size: 'a4' });
+  const pdf = await merge([await styled({ rectangle: true }), a4.bytes]);
+  const { names, text } = files(await toPptx(pdf));
+  assert.ok(names.includes('ppt/slides/slide1.xml') && names.includes('ppt/slides/slide2.xml'));
+  assert.ok(names.includes('ppt/media/page1.png') && !names.includes('ppt/media/page2.png'));
+  assert.match(text('ppt/presentation.xml'), /<p:sldSz cx="7772400" cy="10058400"\/>/);
+  assert.match(text('[Content_Types].xml'), /slide2\.xml/);
+  const heading = text('ppt/slides/slide1.xml');
+  assert.match(heading, /<a:rPr lang="en-US" sz="1800" b="1" i="0" dirty="0"><a:solidFill><a:srgbClr val="ff0000"\/>/);
+  assert.match(text('ppt/slides/slide2.xml'), /quick brown fox/);
+  assert.match(text('docProps/core.xml'), /Styled &amp; &lt;sample&gt;/);
+});
 
+test('pptx: turned text runs down its slide', async () => {
+  const doc = await textDocument({ pages: 1, rotation: 270 });
+  const slide = files(await toPptx(doc.bytes)).text('ppt/slides/slide1.xml');
+  assert.match(slide, /vert="vert270"/);
+});
 
 test('font names from PDFs become the families office suites know', () => {
   assert.deepEqual(fontFace('ABCDEF+Calibri-BoldItalic', -1, 0), { font: 'Calibri', bold: true, italic: true });
@@ -127,6 +146,6 @@ test('bad options are refused', async () => {
   const doc = await textDocument({ pages: 1 });
   await assert.rejects(toDocx(doc.bytes, { background: /** @type {any} */ ('sometimes') }), { code: 'INVALID_OPTION' });
   await assert.rejects(toDocx(doc.bytes, { dpi: 1000 }), { code: 'INVALID_OPTION' });
-  await assert.rejects(toDocx(doc.bytes, { pages: [] }), { code: 'INVALID_OPTION', message: /No pages/ });
+  await assert.rejects(toPptx(doc.bytes, { pages: [] }), { code: 'INVALID_OPTION', message: /No pages/ });
   await assert.rejects(toDocx(new Uint8Array([1])), { code: 'INVALID_INPUT' });
 });
