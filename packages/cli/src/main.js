@@ -11,6 +11,10 @@ email, JPEG, PNG, TIFF; needs LibreOffice for office files and Chromium for web 
   opendocs convert <file> [-o out.pdf] [--paper letter|a4|legal|a3|a5] [--landscape] [--javascript]
   opendocs convert --url https://example.com -o page.pdf [--allow-host intranet.local]
 
+Out of PDF (keeps each page's layout: text boxes for the text, a picture for the rest):
+  opendocs to-docx <file.pdf> [-o out.docx] [--pages ...] [--no-background]
+  opendocs to-pptx <file.pdf> [-o out.pptx] [--pages ...] [--no-background]
+
 Look:
   opendocs info <file.pdf> [--json]
   opendocs text <file.pdf> [--pages 1-3,5]
@@ -117,6 +121,7 @@ const OPTIONS = {
   landscape: { type: 'boolean' },
   javascript: { type: 'boolean' },
   layer: { type: 'string' },
+  'no-background': { type: 'boolean' },
   fit: { type: 'string' },
   lang: { type: 'string' },
   force: { type: 'boolean' },
@@ -218,6 +223,8 @@ const COMMANDS = {
     },
   },
   ocr: { files: 'one', run: ocr },
+  'to-docx': { files: 'one', run: (ctx) => office(ctx, 'docx') },
+  'to-pptx': { files: 'one', run: (ctx) => office(ctx, 'pptx') },
   bookmarks: { files: 'one', run: bookmarks },
   encrypt: {
     files: 'one',
@@ -365,6 +372,20 @@ async function render({ files, values, io }) {
 async function text({ files, values, io }) {
   const result = await od.extractText(await readFile(files[0]), { pages: values.pages, password: values.password });
   io.out(result.map((p) => p.text).join('\n\f') + '\n');
+}
+
+/**
+ * @param {Context} ctx
+ * @param {'docx' | 'pptx'} kind
+ */
+async function office({ files, values, io }, kind) {
+  const target = values.output ?? `${stem(files[0])}.${kind}`;
+  refuseOverwrite(target, files);
+  const options = { pages: values.pages, password: values.password, background: values['no-background'] ? false : undefined };
+  const bytes = await readFile(files[0]);
+  const out = kind === 'docx' ? await od.toDocx(bytes, options) : await od.toPptx(bytes, options);
+  await writeFile(target, out);
+  io.out(`${target}\n`);
 }
 
 /** @param {Context} ctx */

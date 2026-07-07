@@ -143,6 +143,9 @@ export function createClient(options) {
     compress: one('compress'),
     linearize: one('linearize'),
     repair: one('repair'),
+    // out of PDF
+    toDocx: one('to-docx'),
+    toPptx: one('to-pptx'),
     // OCR (the server reads the languages it was started with)
     ocr: one('ocr'),
     recognize: one('recognize'),

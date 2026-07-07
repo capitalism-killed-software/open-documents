@@ -90,3 +90,12 @@ test('overlay takes the document, then the layer', async () => {
   const one = await post('overlay', [doc.bytes]);
   assert.deepEqual([one.statusCode, one.json().error.code], [400, 'INVALID_INPUT']);
 });
+
+test('to-docx and to-pptx answer with office files', async () => {
+  const word = await post('to-docx', [doc.bytes]);
+  assert.equal(word.statusCode, 200, word.body);
+  assert.equal(word.headers['content-type'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  assert.deepEqual([...word.rawPayload.subarray(0, 2)], [0x50, 0x4b], 'a zip');
+  const slides = await post('to-pptx', [doc.bytes], { background: false });
+  assert.equal(slides.headers['content-type'], 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+});

@@ -283,3 +283,15 @@ test('ocr makes a scan searchable and says what it did with each page', async ()
   assert.equal(unknown.code, 1);
   assert.match(unknown.err, /@tesseract\.js-data\/klingon/);
 });
+
+test('to-docx and to-pptx write office files', async () => {
+  const { unzipSync } = await import('fflate');
+  const word = await run(['to-docx', pdf, '-o', join(dir, 'sample.docx')]);
+  assert.equal(word.code, 0);
+  assert.equal(word.out, `${join(dir, 'sample.docx')}\n`);
+  assert.ok(unzipSync(await readFile(join(dir, 'sample.docx')))['word/document.xml']);
+  const slides = await run(['to-pptx', pdf, '--no-background', '--pages', '1-2', '-o', join(dir, 'two.pptx')]);
+  assert.equal(slides.code, 0);
+  const entries = Object.keys(unzipSync(await readFile(join(dir, 'two.pptx'))));
+  assert.ok(entries.includes('ppt/slides/slide2.xml') && !entries.includes('ppt/slides/slide3.xml'));
+});

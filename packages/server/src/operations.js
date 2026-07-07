@@ -15,6 +15,10 @@ import { zipSync } from 'fflate';
 const pdf = (body) => ({ type: 'application/pdf', body });
 /** @param {object} body @returns {Reply} */
 const json = (body) => ({ type: 'application/json', body });
+/** @param {Uint8Array} body @returns {Reply} */
+const docx = (body) => ({ type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', body });
+/** @param {Uint8Array} body @returns {Reply} */
+const pptx = (body) => ({ type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', body });
 /** @param {Record<string, Uint8Array>} files @returns {Reply} */
 const zip = (files) => ({ type: 'application/zip', body: zipSync(files, { level: 0 }) });
 
@@ -87,6 +91,10 @@ export const OPERATIONS = {
   // OCR, with Tesseract
   ocr: { files: 'one', run: async ([f], o, ctx) => pdf(await (await ctx.ocr(o)).ocr(f, pageOptions(o, true))) },
   recognize: { files: 'one', run: async ([f], o, ctx) => json(await (await ctx.ocr(o)).recognize(f, pageOptions(o, false))) },
+
+  // out of PDF
+  'to-docx': { files: 'one', run: async ([f], o) => docx(await od.toDocx(f, o)) },
+  'to-pptx': { files: 'one', run: async ([f], o) => pptx(await od.toPptx(f, o)) },
 
   // building
   'images-to-pdf': { files: 'many', run: async (files, o) => pdf(await od.imagesToPdf(files, o)) },

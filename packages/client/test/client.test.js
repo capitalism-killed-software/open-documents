@@ -98,3 +98,11 @@ test('overlay, ocr and recognize', async () => {
   const layered = await client.overlay(doc.bytes, scan, { pages: [2], behind: true });
   assert.equal((await inspect(layered)).pageCount, 3);
 });
+
+test('toDocx and toPptx come back as office files', async () => {
+  const { unzipSync } = await import('fflate');
+  const word = unzipSync(await client.toDocx(doc.bytes, { pages: [1] }));
+  assert.ok(word['word/document.xml']);
+  const slides = unzipSync(await client.toPptx(doc.bytes));
+  assert.ok(slides['ppt/slides/slide3.xml']);
+});
