@@ -67,6 +67,7 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
 | `overlay` (two files: the document, then the layer; `pages`, `fit`, `behind`) | PDF |
+| `to-docx`, `to-pptx` (`pages`, `background`, `dpi`) | Word or PowerPoint with each page's layout kept |
 | `ocr` (`pages`, `dpi`, `force`) | PDF with the scanned pages made searchable. OCR starts on the first request, which takes a second longer. |
 | `recognize` (`pages`, `dpi`) | JSON: the words read on each page, with positions and confidence |
 | `encrypt`, `decrypt` | PDF |

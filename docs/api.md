@@ -86,6 +86,25 @@ The standard fonts draw Latin text only; anything else is refused rather than dr
 |---|---|
 | `imagesToPdf([jpeg, png, ...], { pageSize, margin, dpi, orientation, title })` | One page per image, fitted and centred. `pageSize`: `"letter"` (default), `"a4"`, `"legal"`, `[w, h]` or `"fit"` (the image's own size at `dpi`). JPEG photos are turned by their EXIF orientation. |
 
+## Out of PDF
+
+Both keep each page's layout exactly: every stretch of text becomes a text box where it was, in
+its font (mapped to the family office suites know, such as Arial for Helvetica), size, weight,
+slant and colour, and everything that is not text (pictures, lines, shading) becomes one
+picture behind it. The text can be edited and searched; it does not reflow the way typed text
+does. Words far apart on a line, such as table columns, get boxes of their own. Converted back
+to PDF by LibreOffice, words land within a point and a half of where they were.
+
+| Function | What it does |
+|---|---|
+| `toDocx(pdf, { pages, background, dpi, password })` | Word. Each page becomes a section of its own size; turned pages come out landscape. Pages over 22 inches are scaled to fit, Word's limit. |
+| `toPptx(pdf, { pages, background, dpi, password })` | PowerPoint, one slide per page. The first page sets the slide size; pages of other sizes are scaled to fit and centred. |
+
+`background`: `"auto"` (the default) draws the picture, except on pages whose text is invisible,
+a scan with an OCR text layer, where it would show every word twice; `true` always; `false`
+never. `dpi` is the picture's resolution, 36 to 300, default 150. Fonts are not embedded: a
+reader without the font uses a similar one, and the text may run a little longer or shorter.
+
 ## Conversions and structure (Node)
 
 `@open-documents/node` adds what needs other programs. LibreOffice, Chromium and qpdf start the
@@ -112,7 +131,7 @@ Layout options for HTML, Markdown, email and web pages: `format` (`letter`, `a4`
 `a5`, `tabloid`), `size: { width, height }` as CSS lengths, `landscape`, `margin`, `scale`,
 `background`, `header` and `footer` (HTML, with `pageNumber` and `totalPages` classes).
 
-PDF to Word, Excel and other formats is planned.
+PDF to Excel, Markdown and HTML is planned.
 
 ## OCR
 

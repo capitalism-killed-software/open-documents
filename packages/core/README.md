@@ -22,7 +22,7 @@ const png = await renderPage(both, { page: 1, dpi: 144 });
 Input is a `Uint8Array`, `ArrayBuffer` or `Blob`; every function returns new bytes. Pages,
 merge, split, slice, crop, N-up, text, words with positions, page images, watermarks, page and
 Bates numbers, headers and footers, overlays and underlays from another PDF, metadata,
-bookmarks, AES-256 encryption, images to PDF.
+bookmarks, AES-256 encryption, images to PDF, PDF to Word and PowerPoint.
 
 In a browser, serve `node_modules/@embedpdf/pdfium/dist/pdfium.wasm` and say where:
 
