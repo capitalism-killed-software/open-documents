@@ -1,0 +1,41 @@
+[project]
+name = "open-documents-worker"
+version = "0.1.1"
+description = "Docling behind a small JSON-lines protocol, for @open-documents/node: PDF to Markdown, HTML, JSON and Excel."
+license = "Apache-2.0"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "docling==2.105.0",
+  "openpyxl==3.1.5",
+  "torch==2.12.1",
+  "torchvision==0.27.1",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["hatchling==1.30.1"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/open_documents_worker"]
+
+[tool.uv]
+# Every package must have been published before this date, like the npm packages.
+exclude-newer = "2026-07-10T00:00:00Z"
+
+# Torch and torchvision from the CPU-only index. The default Linux wheels pull in NVIDIA's CUDA
+# libraries, which are not open source and weigh several gigabytes.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
