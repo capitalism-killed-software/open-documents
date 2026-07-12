@@ -7,3 +7,4 @@ export { markdownToHtml } from './markdown.js';
 export { emlToHtml, msgToHtml } from './email.js';
 export { createConverter } from './convert.js';
 export { createQpdf, findQpdf } from './qpdf.js';
+export { createDocling, findPython, doclingModels, PYTHON_DIR } from './docling.js';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { textDocument, formDocument } from '../src/index.js';
+import { textDocument, formDocument, reportDocument, REPORT_TABLE } from '../src/index.js';
 
 test('same options give the same bytes', async () => {
   const a = await textDocument({ pages: 2 });
@@ -97,4 +97,12 @@ test('office fixtures are the files they claim to be', async () => {
   assert.equal(strFromU8(odt.subarray(30, 38)), 'mimetype', 'mimetype is the first entry');
   assert.match(strFromU8(rtfDocument().bytes), /^\{\\rtf1/);
   assert.equal(strFromU8(csvDocument().bytes).split('\n')[1], 'North,1200');
+});
+
+test('the report has two pages, the same bytes every time, and its table in the truth', async () => {
+  const a = await reportDocument();
+  assert.deepEqual(a.bytes, (await reportDocument()).bytes);
+  assert.equal((await PDFDocument.load(a.bytes)).getPageCount(), 2);
+  assert.equal(a.truth.metadata.title, 'Quarterly Report');
+  assert.deepEqual(a.truth.pages[0].lines.slice(-4), REPORT_TABLE.map((r) => r.join(' ')));
 });

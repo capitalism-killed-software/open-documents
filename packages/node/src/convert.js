@@ -7,12 +7,18 @@ import { createChromium } from './chromium.js';
 import { markdownToHtml } from './markdown.js';
 import { emlToHtml, msgToHtml } from './email.js';
 import { createQpdf } from './qpdf.js';
+import { createDocling } from './docling.js';
 
 /**
  * @typedef {object} ConverterOptions
  * @property {import('./libreoffice.js').LibreOfficeOptions} [libreoffice]
  * @property {import('./chromium.js').ChromiumOptions} [chromium]
  * @property {{ binary?: string, timeout?: number }} [qpdf]
+ * @property {import('./docling.js').DoclingOptions} [docling]
+ */
+
+/**
+ * @typedef {{ pages?: import('@open-documents/core').PageSelection, password?: string, timeout?: number }} StructureOptions
  */
 
 /**
@@ -50,6 +56,19 @@ export function createConverter(options = {}) {
       structural = null;
       throw err;
     }));
+  /** @type {Promise<Awaited<ReturnType<typeof createDocling>>> | null} */
+  let structure = null;
+  const docling = () =>
+    (structure ??= createDocling(options.docling).catch((err) => {
+      structure = null;
+      throw err;
+    }));
+  /**
+   * @param {Uint8Array | ArrayBuffer | Blob} input
+   * @param {StructureOptions} opts
+   * @param {'markdown' | 'html' | 'json' | 'xlsx'} to
+   */
+  const read = async (input, opts, to) => (await docling()).convert(await toBytes(input), { ...opts, to: [to] });
   const decoder = new TextDecoder('utf-8');
 
   return {
@@ -105,11 +124,53 @@ export function createConverter(options = {}) {
      * @param {{ password?: string }} [opts]
      */
     repair: async (input, opts) => (await qpdf()).repair(await toBytes(input), opts),
+    /**
+     * PDF to Markdown, with headings, lists and tables, in reading order (Docling).
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {StructureOptions} [opts]
+     */
+    async pdfToMarkdown(input, opts = {}) {
+      return /** @type {string} */ ((await read(input, opts, 'markdown')).markdown);
+    },
+    /**
+     * PDF to one HTML page, with the same structure (Docling).
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {StructureOptions} [opts]
+     */
+    async pdfToHtml(input, opts = {}) {
+      return /** @type {string} */ ((await read(input, opts, 'html')).html);
+    },
+    /**
+     * PDF to Docling's document model as JSON: every text, table and picture with its page and box.
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {StructureOptions} [opts]
+     * @returns {Promise<Record<string, any>>}
+     */
+    async pdfToJson(input, opts = {}) {
+      return /** @type {Record<string, any>} */ ((await read(input, opts, 'json')).json);
+    },
+    /**
+     * The tables in a PDF as an Excel workbook, one sheet per table (Docling's table model).
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {StructureOptions} [opts]
+     * @returns {Promise<Uint8Array>}
+     */
+    async pdfToXlsx(input, opts = {}) {
+      const result = await read(input, opts, 'xlsx');
+      if (!result.xlsx) throw new OpenDocumentsError('CONVERSION_FAILED', 'No tables were found in the document.');
+      return result.xlsx;
+    },
     async close() {
       const lo = await office?.catch(() => null);
-      await Promise.all([lo?.close(), browser?.close()]);
+      const dl = await structure?.catch(() => null);
+      await Promise.all([lo?.close(), browser?.close(), dl?.close()]);
       office = null;
       browser = null;
+      structure = null;
     },
   };
 }

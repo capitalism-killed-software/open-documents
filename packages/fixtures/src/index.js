@@ -140,6 +140,57 @@ export async function textDocument(options = {}) {
   };
 }
 
+/** The figures in reportDocument's table, header row first. */
+export const REPORT_TABLE = [
+  ['Region', 'Revenue', 'Costs'],
+  ['North', '1200', '800'],
+  ['South', '950', '700'],
+  ['West', '1430', '910'],
+];
+
+/**
+ * A two-page report with structure to find: a heading, a paragraph and a ruled table on the
+ * first page, another heading and a line of text on the second.
+ *
+ * @returns {Promise<Fixture>}
+ */
+export async function reportDocument() {
+  const doc = await PDFDocument.create();
+  setMetadata(doc, { ...DEFAULT_METADATA, title: 'Quarterly Report' });
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const first = doc.addPage(PAGE_SIZES.letter);
+  first.drawText('Quarterly Report', { x: 72, y: 700, size: 22, font: bold });
+  first.drawText('Revenue grew in every region, and costs stayed flat against the plan.', { x: 72, y: 660, size: 11, font });
+  const [left, top, column, row] = [72, 620, 150, 22];
+  REPORT_TABLE.forEach((cells, i) => cells.forEach((text, j) => {
+    first.drawText(text, { x: left + j * column + 6, y: top - i * row - 15, size: 11, font: i === 0 ? bold : font });
+  }));
+  for (let i = 0; i <= REPORT_TABLE.length; i++) {
+    first.drawLine({ start: { x: left, y: top - i * row }, end: { x: left + 3 * column, y: top - i * row }, thickness: 0.8 });
+  }
+  for (let j = 0; j <= 3; j++) {
+    first.drawLine({ start: { x: left + j * column, y: top }, end: { x: left + j * column, y: top - REPORT_TABLE.length * row }, thickness: 0.8 });
+  }
+  const second = doc.addPage(PAGE_SIZES.letter);
+  second.drawText('Second page', { x: 72, y: 700, size: 22, font: bold });
+  second.drawText('Only words here.', { x: 72, y: 660, size: 11, font });
+  const bytes = await doc.save({ useObjectStreams: false });
+  return {
+    bytes,
+    truth: {
+      metadata: { ...DEFAULT_METADATA, title: 'Quarterly Report' },
+      pages: [
+        { width: 612, height: 792, rotation: 0, lines: ['Quarterly Report', 'Revenue grew in every region, and costs stayed flat against the plan.', ...REPORT_TABLE.map((r) => r.join(' '))] },
+        { width: 612, height: 792, rotation: 0, lines: ['Second page', 'Only words here.'] },
+      ],
+      bookmarks: [],
+      attachments: [],
+      encryption: null,
+    },
+  };
+}
+
 /**
  * A one-page form: a filled text field, a ticked check box, a dropdown and an empty field.
  *
