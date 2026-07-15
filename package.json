@@ -17,7 +17,8 @@
     "licences": "node tools/check-licences.js",
     "check": "npm run lint && npm run licences && npm run coverage",
     "check:portable": "npm run lint && npm run licences && npm run coverage:portable",
-    "fetch-binaries": "node tools/fetch-binaries.js"
+    "fetch-binaries": "node tools/fetch-binaries.js",
+    "licences:python": "packages/node/python/.venv/bin/python tools/check-python-licences.py"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",

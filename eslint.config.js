@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['**/node_modules/', 'coverage/', '**/dist/', '**/out/'] },
+  { ignores: ['**/node_modules/', 'coverage/', '**/dist/', '**/out/', '**/.venv/'] },
   js.configs.recommended,
   {
     languageOptions: {

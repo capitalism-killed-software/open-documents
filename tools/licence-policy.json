@@ -14,7 +14,10 @@
     "Unlicense",
     "Python-2.0",
     "CC-BY-4.0",
-    "OFL-1.1"
+    "OFL-1.1",
+    "MIT-CMU",
+    "PSF-2.0",
+    "CNRI-Python"
   ],
   "deny": {
     "mupdf": "MuPDF is AGPL-3.0",
@@ -48,6 +51,9 @@
     "sharp": "ships libvips, which is LGPL"
   },
   "exceptions": {
-    "@embedpdf/plugin-form@2.14.2": "MIT: the package ships an MIT LICENSE file (CloudPDF, like the other EmbedPDF packages) but its package.json has no licence field"
+    "@embedpdf/plugin-form@2.14.2": "MIT: the package ships an MIT LICENSE file (CloudPDF, like the other EmbedPDF packages) but its package.json has no licence field",
+    "certifi@2026.6.17": "MPL-2.0: Mozilla's CA bundle, used unmodified, only inside the separate Docling worker process (see docs/licensing.md)",
+    "tqdm@4.68.4": "MPL-2.0 AND MIT: progress bars Docling imports, used unmodified, only inside the separate Docling worker process (see docs/licensing.md)",
+    "pypdfium2@5.11.0": "BSD-3-Clause or Apache-2.0 for its own code; the PDFium build it ships carries the same permissive licences as @embedpdf/pdfium (BUILD_LICENSES in the wheel)"
   }
 }
