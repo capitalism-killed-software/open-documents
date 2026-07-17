@@ -15,6 +15,12 @@ Out of PDF (keeps each page's layout: text boxes for the text, a picture for the
   opendocs to-docx <file.pdf> [-o out.docx] [--pages ...] [--no-background]
   opendocs to-pptx <file.pdf> [-o out.pptx] [--pages ...] [--no-background]
 
+Structure (headings, lists, tables, reading order; needs the Docling worker, see docs/api.md):
+  opendocs to-markdown <file.pdf> [-o out.md] [--pages ...]     prints it without -o
+  opendocs to-html <file.pdf> [-o out.html] [--pages ...]
+  opendocs to-json <file.pdf> [-o out.json] [--pages ...]
+  opendocs to-xlsx <file.pdf> [-o tables.xlsx] [--pages ...]    one sheet per table
+
 Look:
   opendocs info <file.pdf> [--json]
   opendocs text <file.pdf> [--pages 1-3,5]
@@ -225,6 +231,10 @@ const COMMANDS = {
   ocr: { files: 'one', run: ocr },
   'to-docx': { files: 'one', run: (ctx) => office(ctx, 'docx') },
   'to-pptx': { files: 'one', run: (ctx) => office(ctx, 'pptx') },
+  'to-markdown': { files: 'one', run: (ctx) => structure(ctx, 'markdown') },
+  'to-html': { files: 'one', run: (ctx) => structure(ctx, 'html') },
+  'to-json': { files: 'one', run: (ctx) => structure(ctx, 'json') },
+  'to-xlsx': { files: 'one', run: (ctx) => structure(ctx, 'xlsx') },
   bookmarks: { files: 'one', run: bookmarks },
   encrypt: {
     files: 'one',
@@ -386,6 +396,29 @@ async function office({ files, values, io }, kind) {
   const out = kind === 'docx' ? await od.toDocx(bytes, options) : await od.toPptx(bytes, options);
   await writeFile(target, out);
   io.out(`${target}\n`);
+}
+
+/**
+ * @param {Context} ctx
+ * @param {'markdown' | 'html' | 'json' | 'xlsx'} to
+ */
+async function structure({ files, values, io }, to) {
+  const target = values.output ?? (to === 'xlsx' ? `${stem(files[0])}.xlsx` : undefined);
+  if (target) refuseOverwrite(target, files);
+  const bytes = await readFile(files[0]);
+  const options = { pages: values.pages, password: values.password };
+  await withConverter(async (c) => {
+    const out = to === 'markdown' ? await c.pdfToMarkdown(bytes, options)
+      : to === 'html' ? await c.pdfToHtml(bytes, options)
+        : to === 'json' ? `${JSON.stringify(await c.pdfToJson(bytes, options), null, 2)}\n`
+          : await c.pdfToXlsx(bytes, options);
+    if (target) {
+      await writeFile(target, out);
+      io.out(`${target}\n`);
+    } else {
+      io.out(/** @type {string} */ (out).endsWith('\n') ? /** @type {string} */ (out) : `${out}\n`);
+    }
+  });
 }
 
 /** @param {Context} ctx */

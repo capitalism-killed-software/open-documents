@@ -4,7 +4,7 @@ import * as od from '@open-documents/core';
 import { zipSync } from 'fflate';
 
 /**
- * @typedef {{ type: string, body: Uint8Array | object, filename?: string }} Reply
+ * @typedef {{ type: string, body: Uint8Array | string | object, filename?: string }} Reply
  * @typedef {{ converter: any, ocr: (options: Record<string, any>) => Promise<any> }} Context
  *   converter: from createConverter() in @open-documents/node; ocr: the server's OCR engine from
  *   createOcr() in @open-documents/ocr, started on first use
@@ -95,6 +95,14 @@ export const OPERATIONS = {
   // out of PDF
   'to-docx': { files: 'one', run: async ([f], o) => docx(await od.toDocx(f, o)) },
   'to-pptx': { files: 'one', run: async ([f], o) => pptx(await od.toPptx(f, o)) },
+  // the structure of the document, with Docling
+  'to-markdown': { files: 'one', run: async ([f], o, ctx) => ({ type: 'text/markdown; charset=utf-8', body: await ctx.converter.pdfToMarkdown(f, structure(o)) }) },
+  'to-html': { files: 'one', run: async ([f], o, ctx) => ({ type: 'text/html; charset=utf-8', body: await ctx.converter.pdfToHtml(f, structure(o)) }) },
+  'to-json': { files: 'one', run: async ([f], o, ctx) => json(await ctx.converter.pdfToJson(f, structure(o))) },
+  'to-xlsx': {
+    files: 'one',
+    run: async ([f], o, ctx) => ({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body: await ctx.converter.pdfToXlsx(f, structure(o)) }),
+  },
 
   // building
   'images-to-pdf': { files: 'many', run: async (files, o) => pdf(await od.imagesToPdf(files, o)) },
@@ -108,4 +116,13 @@ export const OPERATIONS = {
  */
 function pageOptions(o, force) {
   return { pages: o.pages, dpi: o.dpi, password: o.password, ...(force ? { force: o.force } : {}) };
+}
+
+/**
+ * Options Docling takes from a request.
+ *
+ * @param {Record<string, any>} o
+ */
+function structure(o) {
+  return { pages: o.pages, password: o.password };
 }

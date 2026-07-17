@@ -259,6 +259,6 @@ function view(job) {
  */
 function send(reply, result) {
   reply.type(result.type);
-  if (result.type === 'application/json') return reply.send(result.body);
+  if (result.type === 'application/json' || typeof result.body === 'string') return reply.send(result.body);
   return reply.send(Buffer.from(/** @type {Uint8Array} */ (result.body)));
 }

@@ -56,6 +56,7 @@ export function createClient(options) {
   const read = async (res) => {
     const type = res.headers.get('content-type') ?? '';
     if (type.startsWith('application/json')) return res.json();
+    if (type.startsWith('text/')) return res.text();
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (type.startsWith('application/zip')) return Object.values(unzipSync(bytes));
     return bytes;
@@ -146,6 +147,14 @@ export function createClient(options) {
     // out of PDF
     toDocx: one('to-docx'),
     toPptx: one('to-pptx'),
+    // structure, with Docling on the server
+    /** @returns {Promise<string>} */
+    pdfToMarkdown: one('to-markdown'),
+    /** @returns {Promise<string>} */
+    pdfToHtml: one('to-html'),
+    pdfToJson: one('to-json'),
+    /** @returns {Promise<Uint8Array>} */
+    pdfToXlsx: one('to-xlsx'),
     // OCR (the server reads the languages it was started with)
     ocr: one('ocr'),
     recognize: one('recognize'),

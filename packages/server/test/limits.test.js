@@ -97,3 +97,29 @@ test('compress, linearize and repair go to the converter', async () => {
     await app.close();
   }
 });
+
+test('to-markdown, to-html, to-json and to-xlsx go to the converter, with only their options', async () => {
+  /** @type {string[]} */
+  const calls = [];
+  const spy = /** @type {any} */ ({
+    pdfToMarkdown: async (/** @type {Uint8Array} */ _b, /** @type {any} */ o) => { calls.push(`md ${JSON.stringify(o)}`); return '# Title'; },
+    pdfToHtml: async () => { calls.push('html'); return '<h1>Title</h1>'; },
+    pdfToJson: async () => { calls.push('json'); return { texts: [] }; },
+    pdfToXlsx: async () => { calls.push('xlsx'); return new Uint8Array([0x50, 0x4b]); },
+    close: async () => {},
+  });
+  const app = await buildServer({ converter: spy });
+  try {
+    /** @param {string} op @param {object} [options] */
+    const post = async (op, options) => app.inject({ method: 'POST', url: `/v1/pdf/${op}`, ...(await form([{ filename: 'a.pdf', data: doc.bytes }], options)) });
+    const md = await post('to-markdown', { pages: [1], timeout: 1, python: '/bin/sh' });
+    assert.deepEqual([md.statusCode, md.headers['content-type'], md.body], [200, 'text/markdown; charset=utf-8', '# Title']);
+    assert.equal((await post('to-html')).headers['content-type'], 'text/html; charset=utf-8');
+    assert.deepEqual((await post('to-json')).json(), { texts: [] });
+    const xlsx = await post('to-xlsx');
+    assert.equal(xlsx.headers['content-type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    assert.deepEqual(calls, ['md {"pages":[1]}', 'html', 'json', 'xlsx']);
+  } finally {
+    await app.close();
+  }
+});

@@ -106,3 +106,20 @@ test('toDocx and toPptx come back as office files', async () => {
   const slides = unzipSync(await client.toPptx(doc.bytes));
   assert.ok(slides['ppt/slides/slide3.xml']);
 });
+
+test('markdown, html, json and excel from the server', { skip: await doclingMissing() }, async () => {
+  const { reportDocument } = await import('@open-documents/fixtures');
+  const { bytes } = await reportDocument();
+  assert.match(await client.pdfToMarkdown(bytes, { pages: [1] }), /\| West\s+\|\s+1430/);
+  assert.match(await client.pdfToHtml(bytes), /<table>/);
+  assert.equal((await client.pdfToJson(bytes)).tables.length, 1);
+  const xlsx = await client.pdfToXlsx(bytes);
+  assert.deepEqual([...xlsx.subarray(0, 2)], [0x50, 0x4b]);
+});
+
+/** Why the Docling tests cannot run here, or false when they can. */
+async function doclingMissing() {
+  const { findPython, doclingModels } = await import('@open-documents/node');
+  const { existsSync } = await import('node:fs');
+  return findPython() && existsSync(doclingModels()) ? false : 'Docling is not set up';
+}

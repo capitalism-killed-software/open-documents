@@ -295,3 +295,26 @@ test('to-docx and to-pptx write office files', async () => {
   const entries = Object.keys(unzipSync(await readFile(join(dir, 'two.pptx'))));
   assert.ok(entries.includes('ppt/slides/slide2.xml') && !entries.includes('ppt/slides/slide3.xml'));
 });
+
+test('to-markdown prints, to-xlsx writes a workbook', { skip: await doclingMissing() }, async () => {
+  const { reportDocument } = await import('@open-documents/fixtures');
+  const report = join(dir, 'report.pdf');
+  await writeFile(report, (await reportDocument()).bytes);
+  const md = await run(['to-markdown', report, '--pages', '1']);
+  assert.equal(md.code, 0);
+  assert.match(md.out, /^## Quarterly Report$/m);
+  const xlsx = await run(['to-xlsx', report, '-o', join(dir, 'tables.xlsx')]);
+  assert.deepEqual([xlsx.code, xlsx.out], [0, `${join(dir, 'tables.xlsx')}\n`]);
+  const json = await run(['to-json', report, '-o', join(dir, 'report.json')]);
+  assert.equal(json.code, 0);
+  assert.equal(JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')).tables.length, 1);
+  const none = await run(['to-xlsx', report, '--pages', '2', '-o', join(dir, 'none.xlsx')]);
+  assert.deepEqual([none.code, none.err], [1, 'error: No tables were found in the document.\n']);
+});
+
+/** Why the Docling tests cannot run here, or false when they can. */
+async function doclingMissing() {
+  const { findPython, doclingModels } = await import('@open-documents/node');
+  const { existsSync } = await import('node:fs');
+  return findPython() && existsSync(doclingModels()) ? false : 'Docling is not set up';
+}
