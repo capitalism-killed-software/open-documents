@@ -45,6 +45,22 @@ The deny list is in `tools/licence-policy.json`, with a reason next to each entr
 `@tesseract.js-data/eng` (the package is MIT; the data inside is Tesseract's own, Apache-2.0).
 tesseract.js runs `opencollective-postinstall` when installed; it only prints a message.
 
+## The Docling worker
+
+`@open-documents/node` ships a small Python program, run as its own process, that uses Docling
+(MIT) for document structure. Its packages are locked in `packages/node/python/uv.lock` and
+checked against the same policy by `tools/check-python-licences.py` (in CI, and with
+`npm run licences:python` once the worker is set up).
+
+- PyTorch comes from its CPU-only index. The default Linux wheels pull in NVIDIA's CUDA
+  libraries, which are not open source.
+- Two MPL-2.0 packages are inside the worker, unmodified: certifi (Mozilla's list of
+  certificate authorities) and tqdm (progress bars). MPL-2.0 applies file by file and only asks
+  that changes to those files be shared; we change neither, and they run in the worker's own
+  process, never in yours.
+- Docling's models: the layout model is Apache-2.0, the table model CDLA-Permissive-2.0, which
+  allows use and redistribution in commercial products.
+
 ## The Docker image
 
 The image is a collection of separate programs: our server (Apache-2.0), Node.js, LibreOffice

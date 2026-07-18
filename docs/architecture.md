@@ -5,7 +5,7 @@
 | Package | Runs in | What it does |
 |---|---|---|
 | `@open-documents/core` | browser and Node | Read, render and change PDFs. No Node-only imports outside `src/platform/node.js`. |
-| `@open-documents/node` | Node | Conversions that need other programs: LibreOffice for office files, Chromium for HTML, Markdown, email and web pages, with the egress proxy and file-type checks. |
+| `@open-documents/node` | Node | Conversions that need other programs: LibreOffice for office files, Chromium for HTML, Markdown, email and web pages, with the egress proxy and file-type checks; Docling in a Python worker (`python/`) for document structure. |
 | `@open-documents/server` | Node | The REST API (Fastify): operations, conversions, jobs, webhooks, API keys. `docker/` builds its image. |
 | `@open-documents/client` | browser and Node | Calls the API with the same function names as core. |
 | `@open-documents/cli` | Node | The `opendocs` command, a thin layer over core and node. |
@@ -13,8 +13,6 @@
 
 | `@open-documents/ocr` | browser and Node | Tesseract (tesseract.js, WebAssembly) in a small worker pool. Pages are drawn by core, read, and the text goes back on as an invisible layer through core's `overlay`. |
 | `@open-documents/viewer` | browser | `<od-viewer>`, a Web Component on EmbedPDF's headless plugins, laid out with Preact and htm inside a shadow root. |
-
-Planned: a Python worker for PDF to Markdown, HTML and Excel.
 
 ## Engines
 

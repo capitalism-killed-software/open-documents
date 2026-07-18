@@ -6,7 +6,8 @@ machines.
 
 ## Run it
 
-With Docker, built from this repository:
+With Docker, built from this repository. `docker/Dockerfile.full` adds Docling for Markdown,
+HTML, JSON and Excel, about two gigabytes more:
 
 ```sh
 docker build -f docker/Dockerfile -t open-documents .
@@ -44,6 +45,7 @@ npx opendocs-server           # listens on 127.0.0.1:3000
 | `OPENDOCS_OCR_LANGUAGES` | `eng` | What OCR reads, comma-separated Tesseract codes such as `eng,deu`. Each needs its data: the `@tesseract.js-data/<code>` package, or a file in `OPENDOCS_OCR_LANG_PATH`. Requests cannot add languages. |
 | `OPENDOCS_OCR_WORKERS` | `2` | Pages read at the same time. Each takes about 100 MB. |
 | `OPENDOCS_OCR_LANG_PATH` | the npm packages | A folder holding `<code>.traineddata.gz` files. |
+| `OPENDOCS_PYTHON`, `OPENDOCS_DOCLING_MODELS` | set in the full image | A Python with Docling and its model folder, for the structure operations. |
 | `OPENDOCS_WORK_DIR` | the system temp folder | Where LibreOffice profiles and job files go. |
 | `OPENDOCS_LOG` | `info` | Log level, or `0` for none. |
 
@@ -68,6 +70,8 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
 | `overlay` (two files: the document, then the layer; `pages`, `fit`, `behind`) | PDF |
 | `to-docx`, `to-pptx` (`pages`, `background`, `dpi`) | Word or PowerPoint with each page's layout kept |
+| `to-markdown`, `to-html` (`pages`) | Markdown or HTML with the document's structure; needs Docling, which the full image includes |
+| `to-json`, `to-xlsx` (`pages`) | Docling's document model, or the tables as a workbook |
 | `ocr` (`pages`, `dpi`, `force`) | PDF with the scanned pages made searchable. OCR starts on the first request, which takes a second longer. |
 | `recognize` (`pages`, `dpi`) | JSON: the words read on each page, with positions and confidence |
 | `encrypt`, `decrypt` | PDF |

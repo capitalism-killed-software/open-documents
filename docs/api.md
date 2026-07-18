@@ -131,7 +131,31 @@ Layout options for HTML, Markdown, email and web pages: `format` (`letter`, `a4`
 `a5`, `tabloid`), `size: { width, height }` as CSS lengths, `landscape`, `margin`, `scale`,
 `background`, `header` and `footer` (HTML, with `pageNumber` and `totalPages` classes).
 
-PDF to Excel, Markdown and HTML is planned.
+### Structure: Markdown, HTML, JSON and Excel (Docling)
+
+Docling (MIT) reads what a page is made of: headings, paragraphs, lists, tables and reading
+order, with a layout model and a table model. It runs in a small Python worker that ships with
+this package, started on first use and kept running.
+
+Set it up once (needs [uv](https://docs.astral.sh/uv/)). The models are about 500 MB:
+
+```sh
+cd node_modules/@open-documents/node/python
+uv sync --frozen
+uv run docling-tools models download layout tableformer -o ~/.cache/open-documents/docling-models
+```
+
+| Method | What it does |
+|---|---|
+| `pdfToMarkdown(pdf, { pages, password, timeout })` | Markdown with headings, lists and tables, in reading order. |
+| `pdfToHtml(pdf, options)` | One HTML page with the same structure. |
+| `pdfToJson(pdf, options)` | Docling's document model: every text, table and picture with its page and box. |
+| `pdfToXlsx(pdf, options)` | Every table in its own sheet, named after its page. Cells that are plain numbers are stored as numbers. Fails with `CONVERSION_FAILED` when there are no tables. |
+
+Scanned pages need a text layer first: run `ocr()` from `@open-documents/ocr`, then these.
+Docling's own OCR is off, and it never reaches the network: Hugging Face downloads are turned
+off and the models are read from their folder. Settings: `createConverter({ docling: { python,
+models, timeout, maxJobs } })`, or `OPENDOCS_PYTHON` and `OPENDOCS_DOCLING_MODELS`.
 
 ## OCR
 
