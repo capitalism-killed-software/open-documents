@@ -8,3 +8,6 @@ examples/browser/*.js
 examples/browser/*.html
 tools/test
 *.log
+**/.venv
+**/__pycache__
+**/.pytest_cache

@@ -12,6 +12,7 @@ node -e "
     const fs = await import('node:fs');
     fs.writeFileSync('$work/report.docx', (await f.docxDocument()).bytes);
     fs.writeFileSync('$work/doc.pdf', (await f.textDocument({ pages: 3 })).bytes);
+    fs.writeFileSync('$work/structure.pdf', (await f.reportDocument()).bytes);
   });"
 
 docker run -d --name od-smoke -p 3000:3000 -e OPENDOCS_API_KEYS="$key" \
@@ -52,6 +53,14 @@ curl -fsS -H "authorization: Bearer $key" -F file=@"$work/doc.pdf" -F 'options={
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/page.png" -F 'options={"pageSize":"fit","dpi":200}' http://127.0.0.1:3000/v1/pdf/images-to-pdf -o "$work/scan.pdf"
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/scan.pdf" http://127.0.0.1:3000/v1/pdf/ocr -o "$work/searchable.pdf"
 curl -fsS -H "authorization: Bearer $key" -F file=@"$work/searchable.pdf" http://127.0.0.1:3000/v1/pdf/text | grep -q 'quick brown fox'
+
+if [ "${FULL:-}" = 1 ]; then
+  echo "== full image: structure with Docling"
+  curl -fsS -H "authorization: Bearer $key" -F file=@"$work/structure.pdf" http://127.0.0.1:3000/v1/pdf/to-markdown -o "$work/structure.md"
+  grep -qE '^\| West +\| +1430' "$work/structure.md"
+  curl -fsS -H "authorization: Bearer $key" -F file=@"$work/structure.pdf" http://127.0.0.1:3000/v1/pdf/to-xlsx -o "$work/tables.xlsx"
+  head -c 2 "$work/tables.xlsx" | grep -q 'PK'
+fi
 
 echo "== packages we never ship"
 if docker run --rm --entrypoint dpkg-query "$image" -W -f '${Package}\n' | grep -E '^(ghostscript|libgs[0-9]|mupdf|libmupdf|imagemagick|graphicsmagick|poppler-utils|pandoc)'; then
