@@ -222,8 +222,11 @@ async function recognizePages(run, input, options) {
  */
 async function read(worker, png, dpi, output) {
   try {
-    // tells Tesseract how big the text really is; the PDF it writes is sized from it too
-    await worker.setParameters({ user_defined_dpi: String(dpi) });
+    // user_defined_dpi tells Tesseract how big the text really is; the PDF it writes is sized
+    // from it too. Page segmentation 3 finds the blocks on the page by itself, as Tesseract's
+    // own command does; tesseract.js defaults to reading the page as one block, which skips
+    // ruled tables entirely.
+    await worker.setParameters({ user_defined_dpi: String(dpi), tessedit_pageseg_mode: /** @type {any} */ ('3') });
     const { data } = await worker.recognize(imageInput(png), { pdfTextOnly: true }, { text: false, ...output });
     return data;
   } catch (e) {

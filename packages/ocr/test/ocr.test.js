@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import { textDocument } from '@open-documents/fixtures';
+import { textDocument, reportDocument } from '@open-documents/fixtures';
 import { renderPages, imagesToPdf, extractText, extractWords, merge, rotate, encrypt } from '@open-documents/core';
 import { createOcr, ocr, recognize } from '../src/index.js';
 import { languageData, linkOrCopy } from '../src/platform/node.js';
@@ -210,4 +210,11 @@ test('in a browser, every file must be served by the page, never fetched from a 
   assert.deepEqual(browser.workerPaths({ workerPath: '/w.js', corePath: '/core' }), { workerPath: '/w.js', corePath: '/core' });
   const blob = browser.imageInput(new Uint8Array([137, 80]));
   assert.equal(blob.type, 'image/png');
+});
+
+test('a ruled table on a scan is read too, not skipped as a picture', async () => {
+  const report = await scan((await reportDocument()).bytes);
+  const [page] = await engine.recognize(report, { pages: [1] });
+  assert.match(page.text, /Region Revenue Costs/);
+  assert.match(page.text, /West 1430 910/);
 });
