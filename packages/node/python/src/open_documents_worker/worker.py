@@ -85,6 +85,21 @@ def cell_value(value: Any) -> Any:
     return text
 
 
+SPACES = re.compile(r" {2,}")
+KEEP_SPACING = {"code", "formula"}
+
+
+def tidy(document: Any) -> None:
+    """One space between words. Text laid over a scan puts a space between words and leaves a
+    gap as well, and Docling counts both. Code and formulas keep their spacing."""
+    for item in document.texts:
+        if str(getattr(item.label, "value", item.label)) not in KEEP_SPACING and isinstance(item.text, str):
+            item.text = SPACES.sub(" ", item.text)
+    for table in document.tables:
+        for cell in table.data.table_cells:
+            cell.text = SPACES.sub(" ", cell.text)
+
+
 def convert(converter: Any, params: dict[str, Any]) -> dict[str, Any]:
     path = Path(params["path"])
     wanted = params.get("to") or ["markdown"]
@@ -96,6 +111,7 @@ def convert(converter: Any, params: dict[str, Any]) -> dict[str, Any]:
         errors = "; ".join(e.error_message for e in result.errors) or result.status.name
         raise Failure("CONVERSION_FAILED", f"Docling could not read the document: {errors}")
     document = result.document
+    tidy(document)
     reply: dict[str, Any] = {"pages": len(result.pages), "tables": len(document.tables), "partial": result.status.name == "PARTIAL_SUCCESS"}
     if "markdown" in wanted:
         reply["markdown"] = document.export_to_markdown()

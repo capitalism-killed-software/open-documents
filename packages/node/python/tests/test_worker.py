@@ -8,12 +8,13 @@ from types import SimpleNamespace
 import pandas as pd
 from openpyxl import load_workbook
 
-from open_documents_worker.worker import cell_value, serve, tables_to_xlsx
+from open_documents_worker.worker import cell_value, serve, tables_to_xlsx, tidy
 
 
 class FakeDocument:
-    def __init__(self, tables):
+    def __init__(self, tables, texts=()):
         self.tables = tables
+        self.texts = list(texts)
 
     def export_to_markdown(self):
         return "# Title"
@@ -28,8 +29,12 @@ class FakeDocument:
         return "Title"
 
 
-def table(frame, page=1):
-    return SimpleNamespace(export_to_dataframe=lambda doc=None: frame, prov=[SimpleNamespace(page_no=page)] if page else [])
+def table(frame, page=1, cells=()):
+    return SimpleNamespace(
+        export_to_dataframe=lambda doc=None: frame,
+        prov=[SimpleNamespace(page_no=page)] if page else [],
+        data=SimpleNamespace(table_cells=[SimpleNamespace(text=c) for c in cells]),
+    )
 
 
 class FakeConverter:
@@ -107,3 +112,11 @@ def test_no_tables_writes_no_workbook(tmp_path):
 
 def test_cell_values():
     assert [cell_value(v) for v in ["12", "-4", "3.5", " 7 ", None, "1e5", "12a"]] == [12, -4, 3.5, 7, "", "1e5", "12a"]
+
+
+def test_one_space_between_words_except_in_code():
+    texts = [SimpleNamespace(label="section_header", text="Quarterly  Report"), SimpleNamespace(label=SimpleNamespace(value="code"), text="x  =  1")]
+    doc = FakeDocument([table(pd.DataFrame(), cells=["North   region"])], texts)
+    tidy(doc)
+    assert [t.text for t in doc.texts] == ["Quarterly Report", "x  =  1"]
+    assert doc.tables[0].data.table_cells[0].text == "North region"
