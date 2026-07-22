@@ -84,3 +84,15 @@ test('without python or models, it says how to set them up', async () => {
     await missing.close();
   }
 });
+
+test('a scanned report, made searchable, gives its table to markdown and excel', { skip }, async () => {
+  const { renderPages, imagesToPdf } = await import('@open-documents/core');
+  const { ocr } = await import('@open-documents/ocr');
+  const scan = await imagesToPdf((await renderPages(report.bytes, { pages: [1], dpi: 200 })).map((p) => p.data), { pageSize: 'fit', dpi: 200 });
+  const searchable = await ocr(scan, { workers: 1 });
+  const markdown = await converter.pdfToMarkdown(searchable);
+  assert.match(markdown, /^## Quarterly Report$/m, 'one space between the words read');
+  assert.match(markdown, /^\| West\s+\|\s+1430\s+\|\s+910\s+\|$/m);
+  const sheet = strFromU8(unzipSync(await converter.pdfToXlsx(searchable))['xl/worksheets/sheet1.xml']);
+  assert.match(sheet, /<v>1430<\/v>/);
+});
