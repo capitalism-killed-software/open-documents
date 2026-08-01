@@ -226,6 +226,25 @@ export class Engine {
   }
 
   /**
+   * Hand a string to PDFium as UTF-16 (FPDF_WIDESTRING) for the length of one call.
+   *
+   * @template T
+   * @param {string} text
+   * @param {(ptr: number) => T} use
+   * @returns {T}
+   */
+  withWideString(text, use) {
+    const size = (text.length + 1) * 2;
+    const ptr = this.malloc(size);
+    try {
+      this.wasm.stringToUTF16(text, ptr, size);
+      return use(ptr);
+    } finally {
+      this.free(ptr);
+    }
+  }
+
+  /**
    * @param {number} count
    * @param {(ptr: number) => unknown} call  receives a pointer to `count` floats
    * @returns {number[]}
