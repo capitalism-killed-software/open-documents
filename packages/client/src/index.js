@@ -138,6 +138,13 @@ export function createClient(options) {
     setBookmarks: (input, bookmarks, opts = {}) => run('set-bookmarks', input, { ...opts, bookmarks }),
     /** @param {Input} input @param {Input} layer */
     overlay: (input, layer, opts = {}) => run('overlay', [input, layer], opts),
+    // forms
+    getFormFields: one('form-fields'),
+    /** @param {Input} input @param {Record<string, string | boolean | string[]>} values */
+    fillForm: (input, values, opts = {}) => run('fill-form', input, { ...opts, values }),
+    /** @param {Input} input @param {object[]} fields */
+    addFormFields: (input, fields, opts = {}) => run('add-form-fields', input, { ...opts, fields }),
+    flatten: one('flatten'),
     encrypt: one('encrypt'),
     decrypt: one('decrypt'),
     // structure (needs qpdf on the server)

@@ -318,3 +318,26 @@ async function doclingMissing() {
   const { existsSync } = await import('node:fs');
   return findPython() && existsSync(doclingModels()) ? false : 'Docling is not set up';
 }
+
+test('fields, fill, add-fields and flatten', async () => {
+  const { formDocument } = await import('@open-documents/fixtures');
+  const file = join(dir, 'form.pdf');
+  await writeFile(file, (await formDocument()).bytes);
+  const listed = await run(['fields', file]);
+  assert.equal(listed.code, 0);
+  assert.match(listed.out, /^colour\s+dropdown\s+green\s+\(options: red, green, blue\)$/m);
+  assert.match(listed.out, /^agree\s+checkbox\s+true$/m);
+  await writeFile(join(dir, 'values.json'), JSON.stringify({ name: 'From The CLI', agree: false }));
+  const filled = join(dir, 'filled.pdf');
+  assert.equal((await run(['fill', file, '--values', join(dir, 'values.json'), '--flatten', '-o', filled])).code, 0);
+  assert.match((await extractText(await readFile(filled)))[0].text, /From The CLI/);
+  await writeFile(join(dir, 'new-fields.json'), JSON.stringify([{ type: 'text', name: 'extra', page: 1, x: 300, y: 500, width: 120, height: 20, value: 'Hi' }]));
+  const more = join(dir, 'more.pdf');
+  assert.equal((await run(['add-fields', file, '--fields', join(dir, 'new-fields.json'), '-o', more])).code, 0);
+  const json = await run(['fields', more, '--json']);
+  assert.equal(JSON.parse(json.out).length, 5);
+  assert.equal((await run(['flatten', more, '-o', join(dir, 'flat.pdf')])).code, 0);
+  assert.equal((await run(['fields', join(dir, 'flat.pdf')])).out, 'No form fields.\n');
+  await writeFile(join(dir, 'broken.json'), '{ not json');
+  assert.deepEqual(await run(['fill', file, '--values', join(dir, 'broken.json')]), { code: 1, out: '', err: `error: ${join(dir, 'broken.json')} is not valid JSON.\n` });
+});

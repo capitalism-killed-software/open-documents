@@ -79,6 +79,12 @@ export const OPERATIONS = {
     },
   },
 
+  // forms
+  'form-fields': { files: 'one', run: async ([f], o) => json(await od.getFormFields(f, o)) },
+  'fill-form': { files: 'one', run: async ([f], o) => pdf(await od.fillForm(f, o.values, o)) },
+  'add-form-fields': { files: 'one', run: async ([f], o) => pdf(await od.addFormFields(f, o.fields, o)) },
+  flatten: { files: 'one', run: async ([f], o) => pdf(await od.flatten(f, o)) },
+
   // security
   encrypt: { files: 'one', run: async ([f], o) => pdf(await od.encrypt(f, /** @type {any} */ (o))) },
   decrypt: { files: 'one', run: async ([f], o) => pdf(await od.decrypt(f, o)) },

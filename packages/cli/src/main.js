@@ -56,6 +56,10 @@ Edit (each writes a new file; -o names it):
   opendocs bates <file.pdf> [--prefix ACME-] [--start N] [--digits 6]
   opendocs meta <file.pdf> [--title ...] [--author ...] [--subject ...] [--keywords ...]
   opendocs overlay <file.pdf> --layer letterhead.pdf [--behind] [--fit contain|stretch] [--pages ...]
+  opendocs fields <file.pdf> [--json]              list form fields and their values
+  opendocs fill <file.pdf> --values values.json [--flatten]   fill fields by name
+  opendocs add-fields <file.pdf> --fields fields.json        add new fields
+  opendocs flatten <file.pdf> [--pages ...]        fields and annotations become part of the page
   opendocs bookmarks <file.pdf> [--json]
   opendocs encrypt <file.pdf> [--user-password pw] [--owner-password pw] [--no-print] [--no-copy] [--no-modify]
   opendocs decrypt <file.pdf> --password pw
@@ -128,6 +132,9 @@ const OPTIONS = {
   javascript: { type: 'boolean' },
   layer: { type: 'string' },
   'no-background': { type: 'boolean' },
+  values: { type: 'string' },
+  fields: { type: 'string' },
+  flatten: { type: 'boolean' },
   fit: { type: 'string' },
   lang: { type: 'string' },
   force: { type: 'boolean' },
@@ -229,6 +236,22 @@ const COMMANDS = {
     },
   },
   ocr: { files: 'one', run: ocr },
+  fields: { files: 'one', run: fields },
+  fill: {
+    files: 'one',
+    run: async (ctx) => {
+      const values = await jsonFile(ctx, 'values');
+      return change(ctx, (bytes, pw) => od.fillForm(bytes, values, { ...pw, flatten: ctx.values.flatten }));
+    },
+  },
+  'add-fields': {
+    files: 'one',
+    run: async (ctx) => {
+      const list = await jsonFile(ctx, 'fields');
+      return change(ctx, (bytes, pw) => od.addFormFields(bytes, list, pw));
+    },
+  },
+  flatten: { files: 'one', run: (ctx) => change(ctx, (bytes, pw) => od.flatten(bytes, { ...pw, pages: ctx.values.pages })) },
   'to-docx': { files: 'one', run: (ctx) => office(ctx, 'docx') },
   'to-pptx': { files: 'one', run: (ctx) => office(ctx, 'pptx') },
   'to-markdown': { files: 'one', run: (ctx) => structure(ctx, 'markdown') },
@@ -419,6 +442,41 @@ async function structure({ files, values, io }, to) {
       io.out(/** @type {string} */ (out).endsWith('\n') ? /** @type {string} */ (out) : `${out}\n`);
     }
   });
+}
+
+/** @param {Context} ctx */
+async function fields({ files, values, io }) {
+  const list = await od.getFormFields(await readFile(files[0]), { password: values.password });
+  if (values.json) {
+    io.out(`${JSON.stringify(list, null, 2)}\n`);
+    return;
+  }
+  if (!list.length) {
+    io.out('No form fields.\n');
+    return;
+  }
+  const width = Math.max(...list.map((f) => f.name.length));
+  for (const f of list) {
+    const value = Array.isArray(f.value) ? f.value.join(', ') : f.value === null ? '' : String(f.value);
+    const notes = [f.required && 'required', f.readOnly && 'read-only', f.options.length && `options: ${f.options.join(', ')}`].filter(Boolean).join('; ');
+    io.out(`${f.name.padEnd(width)}  ${f.type.padEnd(8)}  ${value}${notes ? `  (${notes})` : ''}\n`);
+  }
+}
+
+/**
+ * A JSON file named by an option, such as --values values.json.
+ *
+ * @param {Context} ctx
+ * @param {string} name
+ */
+async function jsonFile(ctx, name) {
+  const path = required(ctx, name);
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') throw err;
+    throw new od.OpenDocumentsError('INVALID_OPTION', `${path} is not valid JSON.`);
+  }
 }
 
 /** @param {Context} ctx */

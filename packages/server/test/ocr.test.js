@@ -99,3 +99,18 @@ test('to-docx and to-pptx answer with office files', async () => {
   const slides = await post('to-pptx', [doc.bytes], { background: false });
   assert.equal(slides.headers['content-type'], 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
 });
+
+test('forms over http: read, fill, add and flatten', async () => {
+  const { formDocument } = await import('@open-documents/fixtures');
+  const { bytes } = await formDocument();
+  const fields = await post('form-fields', [bytes]);
+  assert.deepEqual(fields.json().map((/** @type {any} */ f) => f.name), ['name', 'agree', 'colour', 'notes']);
+  const filled = await post('fill-form', [bytes], { values: { name: 'Over HTTP' }, flatten: true });
+  assert.match((await extractText(new Uint8Array(filled.rawPayload)))[0].text, /Over HTTP/);
+  const added = await post('add-form-fields', [doc.bytes], { fields: [{ type: 'text', name: 'x', page: 1, x: 10, y: 10, width: 50, height: 20 }] });
+  assert.equal(added.statusCode, 200, added.body);
+  const flat = await post('flatten', [bytes]);
+  assert.equal(flat.statusCode, 200);
+  const bad = await post('fill-form', [bytes], { values: { missing: 'x' } });
+  assert.deepEqual([bad.statusCode, bad.json().error.code], [400, 'INVALID_OPTION']);
+});

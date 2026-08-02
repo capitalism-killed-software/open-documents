@@ -123,3 +123,14 @@ async function doclingMissing() {
   const { existsSync } = await import('node:fs');
   return findPython() && existsSync(doclingModels()) ? false : 'Docling is not set up';
 }
+
+test('forms from the client', async () => {
+  const { formDocument } = await import('@open-documents/fixtures');
+  const { bytes } = await formDocument();
+  const filled = await client.fillForm(bytes, { colour: 'red', agree: false });
+  const fields = await client.getFormFields(filled);
+  assert.deepEqual(fields.map((/** @type {any} */ f) => f.value), ['Sample Person', false, 'red', '']);
+  const added = await client.addFormFields(doc.bytes, [{ type: 'checkbox', name: 'ok', page: 2, x: 20, y: 20, width: 12, height: 12, value: true }]);
+  assert.equal((await client.getFormFields(added))[0].value, true);
+  assert.equal((await inspect(await client.flatten(filled))).forms, 'none');
+});
