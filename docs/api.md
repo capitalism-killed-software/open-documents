@@ -73,6 +73,18 @@ The standard fonts draw Latin text only; anything else is refused rather than dr
 | `setMetadata(pdf, { title, author, subject, keywords, creator, producer, creationDate, modDate })` | Change the fields given; `null` clears one. |
 | `setBookmarks(pdf, tree)` | Replace the outline. `[]` removes it. |
 
+## Forms
+
+Filled the way a person fills them, through PDFium's own form filler, so each value and the
+way it looks stay in step, and the file keeps its encryption.
+
+| Function | What it does |
+|---|---|
+| `getFormFields(pdf, { password })` | Every field: `{ name, type, value, options, readOnly, required, multiline, widgets }`. `type` is `text`, `checkbox`, `radio`, `dropdown`, `list`, `signature` or `button`. `value` is the text, `true`/`false` for a check box, the chosen export value for a radio group (or `null`), the chosen options for a list. `widgets` says where the field appears: `{ page, x, y, width, height }` in points as shown, plus `exportValue` for check boxes and radio buttons. |
+| `fillForm(pdf, values, { flatten, password })` | Fill by name: `{ name: 'Sam', agree: true, colour: 'blue' }`. Every name and value is checked before anything changes. Read-only fields can be filled from code. `flatten: true` then makes the values part of the pages. |
+| `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`. Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
+| `flatten(pdf, { pages, password })` | Fields and annotations become part of the pages: they look the same and can no longer be changed. When no field is left, the form itself is removed. |
+
 ## Security
 
 | Function | What it does |

@@ -33,6 +33,7 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
   N-up, insert blank pages
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, letterheads
   and backgrounds from another PDF (over or under the page), metadata, bookmarks
+- **Forms:** read every field, fill them by name, add new ones, flatten
 - **Security:** AES-256 encryption with permissions, and removing it
 - **Structure:** lossless compression, fast web view, repairing damaged files (needs qpdf)
 - **Out of PDF:** Word and PowerPoint with each page's layout kept, text editable; Markdown,
@@ -103,7 +104,7 @@ document in view with the library and shows the result.
 - **Edit:** images, links, existing text
 - **To PDF:** EPUB
 - **From PDF:** Word with flowing text
-- **More:** annotations, forms, compare, smaller scans (lossy image compression), PDF/A,
+- **More:** annotations, form designer, compare, smaller scans (lossy image compression), PDF/A,
   true redaction, digital signatures, fonts beyond Latin
 - **Viewer:** signing, redaction, designing forms
 

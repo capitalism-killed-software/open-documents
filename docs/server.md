@@ -68,6 +68,8 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `merge` (several files; `items` in options gives each one `pages` or `password`), `extract-pages`, `remove-pages`, `reorder`, `rotate`, `slice`, `crop`, `n-up`, `insert-blank-pages` | PDF |
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
+| `form-fields` | JSON: every field with its value and place |
+| `fill-form` (`values`, `flatten`), `add-form-fields` (`fields`), `flatten` (`pages`) | PDF |
 | `overlay` (two files: the document, then the layer; `pages`, `fit`, `behind`) | PDF |
 | `to-docx`, `to-pptx` (`pages`, `background`, `dpi`) | Word or PowerPoint with each page's layout kept |
 | `to-markdown`, `to-html` (`pages`) | Markdown or HTML with the document's structure; needs Docling, which the full image includes |
