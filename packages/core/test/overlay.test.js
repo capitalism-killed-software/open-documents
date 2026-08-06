@@ -108,3 +108,29 @@ test('bad layers and options are refused', async () => {
   await assert.rejects(overlay(doc.bytes, new Uint8Array([1, 2, 3])), { code: 'INVALID_INPUT' });
   await assert.rejects(overlay(doc.bytes, await layer([{}]), { fit: 'cover' }), { code: 'INVALID_OPTION' });
 });
+
+test('a turned layer page goes on as it is shown', async () => {
+  const doc = await textDocument({ pages: 1 }); // portrait
+  const { degrees } = await import('@cantoo/pdf-lib');
+  const turnedLayer = await PDFDocument.load(await layer([{ size: [792, 612], words: [{ text: 'Wide', x: 50, y: 60 }] }]));
+  turnedLayer.getPage(0).setRotation(degrees(90));
+  // shown, the layer is 612 wide and 792 high: the same as the page, so stretch changes nothing
+  const out = await overlay(doc.bytes, await turnedLayer.save(), { fit: 'stretch' });
+  const [layerShown] = await extractWords(await turnedLayer.save());
+  const before = /** @type {import('../src/text.js').Word} */ (layerShown.words.find((w) => w.text === 'Wide'));
+  const after = await wordOn(out, 1, 'Wide');
+  assert.ok(Math.abs(after.x - before.x) < 1 && Math.abs(after.y - before.y) < 1, `${after.x}, ${after.y} not ${before.x}, ${before.y}`);
+  assert.ok(after.height > after.width, 'reads down, as on the turned layer');
+});
+
+test('behind keeps the content of a turned page where it was', async () => {
+  for (const rotation of [90, 180, 270]) {
+    const doc = await textDocument({ pages: 1, rotation });
+    const out = await overlay(doc.bytes, await layer([{ fill: true }]), { behind: true });
+    const [a] = await extractWords(doc.bytes);
+    const [b] = await extractWords(out);
+    const before = /** @type {import('../src/text.js').Word} */ (a.words.find((w) => w.text === 'quick'));
+    const after = /** @type {import('../src/text.js').Word} */ (b.words.find((w) => w.text === 'quick'));
+    assert.ok(Math.abs(after.x - before.x) < 1 && Math.abs(after.y - before.y) < 1, `turned ${rotation}: ${after.x}, ${after.y} not ${before.x}, ${before.y}`);
+  }
+});

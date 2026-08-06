@@ -1,6 +1,7 @@
 // Drawing the pages of one PDF onto the pages of another. Each layer page becomes a form
-// XObject, placed with one matrix that takes it from the layer page as shown to the target
-// page as shown, so rotation and crop boxes on either side come out right.
+// XObject. PDFium makes that XObject as the page is shown: rotation and crop box applied, origin
+// at the bottom left of what a viewer shows. One matrix then takes it onto the target page as
+// shown, so rotation and crop boxes on either side come out right.
 import { engine } from '../engine/pdfium.js';
 import { toPdfBytes } from '../input.js';
 import { selectPages } from '../modify.js';
@@ -62,13 +63,15 @@ export async function overlay(input, layer, options = {}) {
     try {
       pages.forEach((number, i) => {
         const from = layerCount === 1 ? 0 : i;
-        const [layerBox, layerTurns] = pdf.withPage(src, from, (p) => [pdf.visibleBox(p), fn.FPDFPage_GetRotation(p)]);
+        const layerSize = pdf.withPage(src, from, (p) => shownSize(pdf.visibleBox(p), fn.FPDFPage_GetRotation(p)));
         // under the content: copy the page's content into a form before the page is changed
         const own = options.behind ? fn.FPDF_NewXObjectFromPage(doc, doc, number - 1) : 0;
         if (options.behind && !own) fail('ENGINE_ERROR', `Could not read page ${number}.`);
         try {
           pdf.withPage(doc, number - 1, (page) => {
-            const matrix = fitMatrix(layerBox, layerTurns, pdf.visibleBox(page), fn.FPDFPage_GetRotation(page), fit);
+            const box = pdf.visibleBox(page);
+            const turns = fn.FPDFPage_GetRotation(page);
+            const matrix = fitMatrix([0, 0, layerSize.width, layerSize.height], 0, box, turns, fit);
             const form = fn.FPDF_NewFormObjectFromXObject(xobject(from));
             if (!form) fail('ENGINE_ERROR', `Could not place the layer on page ${number}.`);
             fn.FPDFPageObj_Transform(form, ...matrix);
@@ -79,7 +82,11 @@ export async function overlay(input, layer, options = {}) {
                 fn.FPDFPageObj_Destroy(obj);
               }
               fn.FPDFPage_InsertObject(page, form);
-              fn.FPDFPage_InsertObject(page, fn.FPDF_NewFormObjectFromXObject(own));
+              // the page's own content comes back as shown too, so turn it back onto the page
+              const shown = shownSize(box, turns);
+              const content = fn.FPDF_NewFormObjectFromXObject(own);
+              fn.FPDFPageObj_Transform(content, ...fitMatrix([0, 0, shown.width, shown.height], 0, box, turns, 'stretch'));
+              fn.FPDFPage_InsertObject(page, content);
             } else {
               fn.FPDFPage_InsertObject(page, form);
             }
