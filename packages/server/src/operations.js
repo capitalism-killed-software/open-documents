@@ -85,6 +85,14 @@ export const OPERATIONS = {
   'add-form-fields': { files: 'one', run: async ([f], o) => pdf(await od.addFormFields(f, o.fields, o)) },
   flatten: { files: 'one', run: async ([f], o) => pdf(await od.flatten(f, o)) },
 
+  // two versions of a document: the first file, then the second
+  'compare-text': { files: 'many', run: async (files, o) => json(await od.compareText(...two(files, 'compare-text'), o)) },
+  'compare-visual': {
+    files: 'many',
+    run: async (files, o) => json((await od.compareVisual(...two(files, 'compare-visual'), o)).map(({ image, ...page }) => ({ ...page, ...(image ? { png: Buffer.from(image).toString('base64') } : {}) }))),
+  },
+  'compare-report': { files: 'many', run: async (files, o) => pdf(await od.compareReport(...two(files, 'compare-report'), o)) },
+
   // security
   encrypt: { files: 'one', run: async ([f], o) => pdf(await od.encrypt(f, /** @type {any} */ (o))) },
   decrypt: { files: 'one', run: async ([f], o) => pdf(await od.decrypt(f, o)) },
@@ -131,4 +139,14 @@ function pageOptions(o, force) {
  */
 function structure(o) {
   return { pages: o.pages, password: o.password };
+}
+
+/**
+ * @param {Uint8Array[]} files
+ * @param {string} name
+ * @returns {[Uint8Array, Uint8Array]}
+ */
+function two(files, name) {
+  if (files.length !== 2) throw new od.OpenDocumentsError('INVALID_INPUT', `${name} takes two files: the first version, then the second.`);
+  return [files[0], files[1]];
 }

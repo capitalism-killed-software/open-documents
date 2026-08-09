@@ -134,3 +134,11 @@ test('forms from the client', async () => {
   assert.equal((await client.getFormFields(added))[0].value, true);
   assert.equal((await inspect(await client.flatten(filled))).forms, 'none');
 });
+
+test('compare from the client', async () => {
+  const a = (await textDocument({ pages: 1, lines: () => ['Pay 1200 now.'] })).bytes;
+  const b = (await textDocument({ pages: 1, lines: () => ['Pay 1350 now.'] })).bytes;
+  assert.equal((await client.compareText(a, b)).changes[0].after, '1350');
+  assert.ok((await client.compareVisual(a, b))[0].changed > 0);
+  assert.equal((await inspect(await client.compareReport(a, b))).pageCount, 1);
+});

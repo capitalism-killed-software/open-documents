@@ -26,6 +26,10 @@ Look:
   opendocs text <file.pdf> [--pages 1-3,5]
   opendocs render <file.pdf> [--page N | --pages 1-3] [--dpi N | --width PX] [-o out.png]
 
+Compare two versions:
+  opendocs compare <before.pdf> <after.pdf> [--json] [--exact] [-o report.pdf]
+                                   list what changed; -o writes a side-by-side report
+
 Pages (each writes a new file; -o names it):
   opendocs merge <a.pdf> <b.pdf> ... -o out.pdf
   opendocs split <file.pdf> [--every N | --ranges "1-3;4-last" | --at 4,9] [-o folder]
@@ -132,6 +136,8 @@ const OPTIONS = {
   javascript: { type: 'boolean' },
   layer: { type: 'string' },
   'no-background': { type: 'boolean' },
+  exact: { type: 'boolean' },
+  'password-b': { type: 'string' },
   values: { type: 'string' },
   fields: { type: 'string' },
   flatten: { type: 'boolean' },
@@ -156,6 +162,7 @@ const COMMANDS = {
   text: { files: 'one', run: text },
   render: { files: 'one', run: render },
   merge: { files: 'many', run: merge },
+  compare: { files: 'many', run: compare },
   split: { files: 'one', run: split },
   extract: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.extractPages(bytes, required(ctx, 'pages'), pw)) },
   remove: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.removePages(bytes, required(ctx, 'pages'), pw)) },
@@ -316,9 +323,10 @@ export async function main(argv, io) {
       io.err('opendocs convert needs one file, or --url and no file.\n');
       return 2;
     }
-  } else if (files.length === 0 || (spec.files === 'one' && files.length > 1) || (command === 'merge' && files.length < 2)) {
+  } else if (files.length === 0 || (spec.files === 'one' && files.length > 1) || (command === 'merge' && files.length < 2) || (command === 'compare' && files.length !== 2)) {
     io.err(
       command === 'merge' ? 'opendocs merge needs two or more PDF files.\n'
+        : command === 'compare' ? 'opendocs compare needs two PDF files: the first version, then the second.\n'
         : command === 'images' ? 'opendocs images needs one or more JPEG or PNG files.\n'
           : `opendocs ${command} needs one PDF file.\n`,
     );
@@ -510,6 +518,35 @@ async function ocr(ctx) {
   } finally {
     await engine.close();
   }
+}
+
+/** @param {Context} ctx */
+async function compare({ files, values, io }) {
+  const [a, b] = await Promise.all(files.map((f) => readFile(f)));
+  const options = { exact: values.exact, password: values.password, passwordB: values['password-b'] };
+  if (values.output) {
+    refuseOverwrite(values.output, files);
+    const sheets = await od.compareReport(a, b, { ...options, labels: [basename(files[0]), basename(files[1])] });
+    await writeFile(values.output, sheets);
+    await report(io, values.output, sheets);
+    return;
+  }
+  const result = await od.compareText(a, b, options);
+  if (values.json) {
+    io.out(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  if (result.identical) {
+    io.out('The text is the same.\n');
+    return;
+  }
+  for (const change of result.changes) {
+    const where = change.afterWords[0] ? `page ${change.afterWords[0].page}` : `page ${change.beforeWords[0].page} of the first`;
+    if (change.type === 'changed') io.out(`${where}: "${change.before}" became "${change.after}"\n`);
+    else if (change.type === 'added') io.out(`${where}: added "${change.after}"\n`);
+    else io.out(`${where}: removed "${change.before}"\n`);
+  }
+  io.out(`${result.changes.length} change${result.changes.length === 1 ? '' : 's'}: ${result.words.removed} words removed, ${result.words.added} added.\n`);
 }
 
 /** @param {Context} ctx */

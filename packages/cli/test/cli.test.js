@@ -341,3 +341,19 @@ test('fields, fill, add-fields and flatten', async () => {
   await writeFile(join(dir, 'broken.json'), '{ not json');
   assert.deepEqual(await run(['fill', file, '--values', join(dir, 'broken.json')]), { code: 1, out: '', err: `error: ${join(dir, 'broken.json')} is not valid JSON.\n` });
 });
+
+test('compare lists the changes, or writes a side-by-side report', async () => {
+  const a = join(dir, 'lease-a.pdf');
+  const b = join(dir, 'lease-b.pdf');
+  await writeFile(a, (await textDocument({ pages: 1, lines: () => ['The tenant pays 1200 dollars.', 'Pets are not allowed.'] })).bytes);
+  await writeFile(b, (await textDocument({ pages: 1, lines: () => ['The tenant pays 1350 dollars.', 'Pets are allowed.'] })).bytes);
+  const listed = await run(['compare', a, b]);
+  assert.equal(listed.code, 0);
+  assert.equal(listed.out, 'page 1: "1200" became "1350"\npage 1 of the first: removed "not"\n2 changes: 2 words removed, 1 added.\n');
+  assert.equal((await run(['compare', a, a])).out, 'The text is the same.\n');
+  assert.equal(JSON.parse((await run(['compare', a, b, '--json'])).out).changes.length, 2);
+  const sheets = join(dir, 'lease-report.pdf');
+  assert.equal((await run(['compare', a, b, '-o', sheets])).code, 0);
+  assert.match((await extractText(await readFile(sheets)))[0].text, /lease-a\.pdf, page 1/);
+  assert.equal((await run(['compare', a])).code, 2);
+});

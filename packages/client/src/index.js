@@ -145,6 +145,13 @@ export function createClient(options) {
     /** @param {Input} input @param {object[]} fields */
     addFormFields: (input, fields, opts = {}) => run('add-form-fields', input, { ...opts, fields }),
     flatten: one('flatten'),
+    // two versions of a document
+    /** @param {Input} a @param {Input} b */
+    compareText: (a, b, opts = {}) => run('compare-text', [a, b], opts),
+    /** @param {Input} a @param {Input} b @returns {Promise<any[]>} pages; with images, each has png (base64) */
+    compareVisual: (a, b, opts = {}) => run('compare-visual', [a, b], opts),
+    /** @param {Input} a @param {Input} b */
+    compareReport: (a, b, opts = {}) => run('compare-report', [a, b], opts),
     encrypt: one('encrypt'),
     decrypt: one('decrypt'),
     // structure (needs qpdf on the server)

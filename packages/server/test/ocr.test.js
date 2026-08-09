@@ -114,3 +114,17 @@ test('forms over http: read, fill, add and flatten', async () => {
   const bad = await post('fill-form', [bytes], { values: { missing: 'x' } });
   assert.deepEqual([bad.statusCode, bad.json().error.code], [400, 'INVALID_OPTION']);
 });
+
+test('compare two versions over http', async () => {
+  const { textDocument } = await import('@open-documents/fixtures');
+  const a = (await textDocument({ pages: 1, lines: () => ['Pay 1200 now.'] })).bytes;
+  const b = (await textDocument({ pages: 1, lines: () => ['Pay 1350 now.'] })).bytes;
+  const text = await post('compare-text', [a, b]);
+  assert.deepEqual(text.json().changes.map((/** @type {any} */ c) => [c.before, c.after]), [['1200', '1350']]);
+  const visual = await post('compare-visual', [a, b], { images: true, dpi: 36 });
+  assert.match(visual.json()[0].png, /^iVBOR/);
+  const report = await post('compare-report', [a, b]);
+  assert.equal(report.headers['content-type'], 'application/pdf');
+  const one = await post('compare-text', [a]);
+  assert.deepEqual([one.statusCode, one.json().error.code], [400, 'INVALID_INPUT']);
+});
