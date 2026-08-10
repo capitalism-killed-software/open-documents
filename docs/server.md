@@ -68,6 +68,8 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `merge` (several files; `items` in options gives each one `pages` or `password`), `extract-pages`, `remove-pages`, `reorder`, `rotate`, `slice`, `crop`, `n-up`, `insert-blank-pages` | PDF |
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
+| `compare-text`, `compare-visual` (two files: first version, then second) | JSON; with `images`, `compare-visual` adds each page's picture as base64 `png` |
+| `compare-report` (two files) | PDF: both versions side by side with the changes marked |
 | `form-fields` | JSON: every field with its value and place |
 | `fill-form` (`values`, `flatten`), `add-form-fields` (`fields`), `flatten` (`pages`) | PDF |
 | `overlay` (two files: the document, then the layer; `pages`, `fit`, `behind`) | PDF |

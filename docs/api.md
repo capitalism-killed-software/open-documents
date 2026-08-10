@@ -85,6 +85,17 @@ way it looks stay in step, and the file keeps its encryption.
 | `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`. Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
 | `flatten(pdf, { pages, password })` | Fields and annotations become part of the pages: they look the same and can no longer be changed. When no field is left, the form itself is removed. |
 
+## Compare
+
+Two versions of a document. Text is compared across the whole document, so text that only moved
+to another page is not a change.
+
+| Function | What it does |
+|---|---|
+| `compareText(a, b, { exact, ignoreCase, password, passwordB })` | `{ identical, words: { removed, added }, changes }`. Each change is `removed`, `added` or `changed`, with `before` and `after` text and `beforeWords` and `afterWords`: every word with its `page` and box as shown. Punctuation at the start and end of a word is left out of the match (`"month."` matches `"month,"`) unless `exact: true`; inside a word it always counts (`"1,200"` is not `"1.200"`). |
+| `compareVisual(a, b, { dpi, images })` | For each page number, `{ page, changed, sameSize }`: the share of pixels that differ. `images: true` adds a PNG of the first version, faded, with the differences in red. |
+| `compareReport(a, b, { labels, exact, ignoreCase })` | A PDF with both versions side by side, page by page: removed words marked red on the left, added words green on the right. `labels` default to `["Before", "After"]`. |
+
 ## Security
 
 | Function | What it does |
