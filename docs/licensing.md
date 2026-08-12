@@ -38,6 +38,12 @@ this library, so they are out:
 
 The deny list is in `tools/licence-policy.json`, with a reason next to each entry.
 
+## Code we carry
+
+`packages/core/src/vendor/jpeg-encode.js` is the JPEG encoder from jpeg-js (BSD-3-Clause), a
+port of Adobe's AS3 corelib encoder (BSD-3-Clause), changed to an ES module that returns bytes so
+it runs in browsers. Both licences are at the top of the file and in `NOTICE`.
+
 ## OCR
 
 `@open-documents/ocr` uses tesseract.js and tesseract.js-core (Apache-2.0), which are Tesseract

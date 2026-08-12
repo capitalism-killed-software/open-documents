@@ -14,6 +14,7 @@ export { nUp } from './pages/nup.js';
 export { insertBlankPages } from './pages/blank.js';
 export { addText, watermark, pageNumbers, headerFooter, bates } from './edit/text.js';
 export { overlay } from './edit/overlay.js';
+export { compressImages } from './edit/images.js';
 export { getFormFields, fillForm, addFormFields, flatten } from './forms.js';
 export { compareText, compareVisual, compareReport } from './compare.js';
 export { setMetadata } from './edit/metadata.js';
