@@ -134,6 +134,7 @@ export function createClient(options) {
     headerFooter: one('header-footer'),
     bates: one('bates'),
     setMetadata: one('metadata'),
+    compressImages: one('compress-images'),
     /** @param {Input} input @param {object[]} bookmarks */
     setBookmarks: (input, bookmarks, opts = {}) => run('set-bookmarks', input, { ...opts, bookmarks }),
     /** @param {Input} input @param {Input} layer */

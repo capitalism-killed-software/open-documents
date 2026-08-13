@@ -357,3 +357,13 @@ test('compare lists the changes, or writes a side-by-side report', async () => {
   assert.match((await extractText(await readFile(sheets)))[0].text, /lease-a\.pdf, page 1/);
   assert.equal((await run(['compare', a])).code, 2);
 });
+
+test('compress-images scales a scan down', async () => {
+  const { renderPages, imagesToPdf } = await import('@open-documents/core');
+  const scan = await imagesToPdf((await renderPages(await readFile(pdf), { pages: [1], dpi: 300 })).map((p) => p.data), { pageSize: 'fit', dpi: 300 });
+  const file = join(dir, 'big-scan.pdf');
+  await writeFile(file, scan);
+  const out = join(dir, 'small-scan.pdf');
+  assert.equal((await run(['compress-images', file, '--dpi', '100', '--quality', '70', '-o', out])).code, 0);
+  assert.ok((await readFile(out)).length < scan.length);
+});

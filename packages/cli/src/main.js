@@ -42,8 +42,10 @@ Pages (each writes a new file; -o names it):
   opendocs nup <file.pdf> [--columns 2] [--rows 1]
   opendocs blank <file.pdf> --at N [--count N]
 
-Structure (needs qpdf):
+Smaller files (compress, linearize and repair need qpdf):
   opendocs compress <file.pdf>     smaller, losing nothing
+  opendocs compress-images <file.pdf> [--dpi 150] [--quality 75]
+                                   scans and photos scaled down (works without qpdf)
   opendocs linearize <file.pdf>    fast web view
   opendocs repair <file.pdf>       rebuild a damaged file
 
@@ -137,6 +139,7 @@ const OPTIONS = {
   layer: { type: 'string' },
   'no-background': { type: 'boolean' },
   exact: { type: 'boolean' },
+  quality: { type: 'string' },
   'password-b': { type: 'string' },
   values: { type: 'string' },
   fields: { type: 'string' },
@@ -287,6 +290,14 @@ const COMMANDS = {
     },
   },
   decrypt: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.decrypt(bytes, pw)) },
+  'compress-images': {
+    files: 'one',
+    run: (ctx) => change(ctx, (bytes, pw) => od.compressImages(bytes, {
+      ...pw,
+      dpi: ctx.values.dpi === undefined ? undefined : integer(ctx.values.dpi, '--dpi'),
+      quality: ctx.values.quality === undefined ? undefined : integer(ctx.values.quality, '--quality'),
+    })),
+  },
   compress: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.compress(bytes, pw))) },
   linearize: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.linearize(bytes, pw))) },
   repair: { files: 'one', run: (ctx) => withConverter((c) => change(ctx, (bytes, pw) => c.repair(bytes, pw))) },

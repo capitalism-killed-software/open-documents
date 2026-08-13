@@ -37,7 +37,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Compare:** the words that changed between two versions and where they are, how much each
   page changed, and a side-by-side report with the changes marked
 - **Security:** AES-256 encryption with permissions, and removing it
-- **Structure:** lossless compression, fast web view, repairing damaged files (needs qpdf)
+- **Smaller files:** scans and photos scaled down to a target resolution and stored as JPEG or
+  PNG (in the browser too); lossless compression, fast web view and repair (needs qpdf)
 - **Out of PDF:** Word and PowerPoint with each page's layout kept, text editable; Markdown,
   HTML and JSON with headings, lists and tables in reading order, and tables to Excel (Docling)
 - **OCR:** make scanned PDFs searchable and read words with their positions, in Node or the
@@ -106,7 +107,7 @@ document in view with the library and shows the result.
 - **Edit:** images, links, existing text
 - **To PDF:** EPUB
 - **From PDF:** Word with flowing text
-- **More:** annotations, form designer, smaller scans (lossy image compression), PDF/A,
+- **More:** annotations, form designer, PDF/A,
   true redaction, digital signatures, fonts beyond Latin
 - **Viewer:** signing, redaction, designing forms
 

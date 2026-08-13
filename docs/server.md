@@ -79,6 +79,7 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `ocr` (`pages`, `dpi`, `force`) | PDF with the scanned pages made searchable. OCR starts on the first request, which takes a second longer. |
 | `recognize` (`pages`, `dpi`) | JSON: the words read on each page, with positions and confidence |
 | `encrypt`, `decrypt` | PDF |
+| `compress-images` (`dpi`, `quality`) | PDF with scans and photos scaled down |
 | `compress` (lossless), `linearize` (fast web view), `repair` | PDF; these need qpdf, which the image includes |
 | `images-to-pdf` (several JPEG or PNG files) | PDF |
 

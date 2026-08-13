@@ -70,6 +70,7 @@ export const OPERATIONS = {
   'header-footer': { files: 'one', run: async ([f], o) => pdf(await od.headerFooter(f, /** @type {any} */ (o))) },
   bates: { files: 'one', run: async ([f], o) => pdf(await od.bates(f, o)) },
   metadata: { files: 'one', run: async ([f], o) => pdf(await od.setMetadata(f, o)) },
+  'compress-images': { files: 'one', run: async ([f], o) => pdf(await od.compressImages(f, o)) },
   'set-bookmarks': { files: 'one', run: async ([f], o) => pdf(await od.setBookmarks(f, o.bookmarks, o)) },
   overlay: {
     files: 'many',

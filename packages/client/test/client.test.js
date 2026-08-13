@@ -142,3 +142,9 @@ test('compare from the client', async () => {
   assert.ok((await client.compareVisual(a, b))[0].changed > 0);
   assert.equal((await inspect(await client.compareReport(a, b))).pageCount, 1);
 });
+
+test('compressImages over the server', async () => {
+  const { renderPages, imagesToPdf } = await import('@open-documents/core');
+  const scan = await imagesToPdf((await renderPages(doc.bytes, { pages: [1], dpi: 300 })).map((p) => p.data), { pageSize: 'fit', dpi: 300 });
+  assert.ok((await client.compressImages(scan, { dpi: 100 })).length < scan.length);
+});

@@ -70,6 +70,7 @@ The standard fonts draw Latin text only; anything else is refused rather than dr
 | `headerFooter(pdf, { header, footer, start, title })` | Each of `header` and `footer` has `left`, `center` and `right`, using `{n}`, `{total}` and `{title}`. |
 | `bates(pdf, { prefix, suffix, start, digits, position })` | Running labels like `ACME-000123`. |
 | `overlay(pdf, layer, { pages, fit, behind })` | Draw the pages of another PDF on the pages: a letterhead, a background, a template. A one-page layer goes on every page; otherwise one layer page per selected page, in order. `fit`: `"contain"` (default, keeps proportions, centred) or `"stretch"`. `behind: true` puts it under the content; the page's own content moves into a form, which a tagged PDF's structure tree no longer reaches. |
+| `compressImages(pdf, { dpi, quality })` | Smaller files from pictures sharper than they need to be, such as scans: each image drawn at more than `dpi` (default 150) is scaled down and stored again as PNG or JPEG (`quality` 10 to 100, default 75), whichever is smaller, and only if that is smaller than before. Text and drawings are untouched; images with transparency are left alone. Works in the browser too. |
 | `setMetadata(pdf, { title, author, subject, keywords, creator, producer, creationDate, modDate })` | Change the fields given; `null` clears one. |
 | `setBookmarks(pdf, tree)` | Replace the outline. `[]` removes it. |
 
