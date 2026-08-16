@@ -1,6 +1,6 @@
 // One entry point for "make this a PDF": works out what the file is and sends it to the right
 // converter. LibreOffice and Chromium start the first time they are needed.
-import { imagesToPdf, OpenDocumentsError } from '@open-documents/core';
+import { imagesToPdf, toPdfA, OpenDocumentsError } from '@open-documents/core';
 import { sniff } from './sniff.js';
 import { createLibreOffice, OFFICE_KINDS } from './libreoffice.js';
 import { createChromium } from './chromium.js';
@@ -29,10 +29,13 @@ import { createDocling } from './docling.js';
  *   timeout?: number,
  *   allowHtml?: boolean,
  *   image?: import('@open-documents/core').ImagesToPdfOptions,
+ *   pdfa?: 1 | 2 | 3,
  * }} ToPdfOptions
  *   filename helps tell apart files whose bytes look alike (CSV, Markdown and plain text).
  *   Layout options apply to HTML, Markdown and email. assets and javascript apply to HTML.
- *   allowHtml applies to Markdown. image applies to JPEG and PNG.
+ *   allowHtml applies to Markdown. image applies to JPEG and PNG. pdfa makes PDF/A-1b, 2b or
+ *   3b: office files through LibreOffice's own PDF/A export, everything else with core's
+ *   toPdfA() afterwards (check the result with checkPdfA()).
  */
 
 /**
@@ -70,6 +73,25 @@ export function createConverter(options = {}) {
    */
   const read = async (input, opts, to) => (await docling()).convert(await toBytes(input), { ...opts, to: [to] });
   const decoder = new TextDecoder('utf-8');
+  /**
+   * Any supported file to an ordinary PDF.
+   *
+   * @param {Uint8Array} bytes
+   * @param {string} kind
+   * @param {ToPdfOptions} opts
+   * @returns {Promise<Uint8Array>}
+   */
+const plain = async (bytes, kind, opts) => {
+    if (kind === 'pdf') return bytes;
+    if (kind === 'jpeg' || kind === 'png') return imagesToPdf([bytes], opts.image);
+    if (kind === 'html') return chromium().htmlToPdf(decoder.decode(bytes), opts);
+    if (kind === 'markdown') return chromium().htmlToPdf(markdownToHtml(decoder.decode(bytes), { allowHtml: opts.allowHtml }), { ...opts, javascript: false });
+    if (kind === 'eml' || kind === 'msg') {
+      const page = kind === 'eml' ? await emlToHtml(bytes) : await msgToHtml(bytes);
+      return chromium().htmlToPdf(page.html, { ...opts, assets: page.assets, javascript: false });
+    }
+    throw new OpenDocumentsError('INVALID_INPUT', kind === 'unknown' ? 'This file type is not recognised.' : `${kind} files cannot be converted to PDF yet.`);
+  };
 
   return {
     /**
@@ -78,18 +100,12 @@ export function createConverter(options = {}) {
      * @returns {Promise<Uint8Array>}
      */
     async toPdf(input, opts = {}) {
+      if (opts.pdfa !== undefined && ![1, 2, 3].includes(opts.pdfa)) throw new OpenDocumentsError('INVALID_OPTION', 'pdfa must be 1, 2 or 3.');
       const bytes = await toBytes(input);
       const { kind } = sniff(bytes, { filename: opts.filename });
-      if (kind === 'pdf') return bytes;
-      if (kind in OFFICE_KINDS) return (await libreoffice()).convert(bytes, { kind: /** @type {keyof typeof OFFICE_KINDS} */ (kind), timeout: opts.timeout });
-      if (kind === 'jpeg' || kind === 'png') return imagesToPdf([bytes], opts.image);
-      if (kind === 'html') return chromium().htmlToPdf(decoder.decode(bytes), opts);
-      if (kind === 'markdown') return chromium().htmlToPdf(markdownToHtml(decoder.decode(bytes), { allowHtml: opts.allowHtml }), { ...opts, javascript: false });
-      if (kind === 'eml' || kind === 'msg') {
-        const page = kind === 'eml' ? await emlToHtml(bytes) : await msgToHtml(bytes);
-        return chromium().htmlToPdf(page.html, { ...opts, assets: page.assets, javascript: false });
-      }
-      throw new OpenDocumentsError('INVALID_INPUT', kind === 'unknown' ? 'This file type is not recognised.' : `${kind} files cannot be converted to PDF yet.`);
+      if (kind in OFFICE_KINDS) return (await libreoffice()).convert(bytes, { kind: /** @type {keyof typeof OFFICE_KINDS} */ (kind), timeout: opts.timeout, pdfa: opts.pdfa });
+      const pdf = await plain(bytes, kind, opts);
+      return opts.pdfa ? toPdfA(pdf, { part: opts.pdfa }) : pdf;
     },
     /**
      * @param {string} html

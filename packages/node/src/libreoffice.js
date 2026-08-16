@@ -20,6 +20,14 @@ export const OFFICE_KINDS = {
   gif: 'gif', tiff: 'tiff', webp: 'webp', bmp: 'bmp',
 };
 
+// LibreOffice's PDF export filter for each kind, needed to pass export options such as PDF/A
+const FILTERS = /** @type {Record<string, string>} */ ({
+  docx: 'writer_pdf_Export', doc: 'writer_pdf_Export', odt: 'writer_pdf_Export', rtf: 'writer_pdf_Export', text: 'writer_pdf_Export',
+  xlsx: 'calc_pdf_Export', xls: 'calc_pdf_Export', ods: 'calc_pdf_Export', csv: 'calc_pdf_Export',
+  pptx: 'impress_pdf_Export', ppt: 'impress_pdf_Export', odp: 'impress_pdf_Export',
+  odg: 'draw_pdf_Export', gif: 'draw_pdf_Export', tiff: 'draw_pdf_Export', webp: 'draw_pdf_Export', bmp: 'draw_pdf_Export',
+});
+
 const CANDIDATES = [
   '/usr/bin/soffice',
   '/usr/lib/libreoffice/program/soffice',
@@ -124,7 +132,7 @@ export async function createLibreOffice(options = {}) {
   return {
     binary,
     workDir: base,
-    async convert(bytes, { kind, timeout: jobTimeout }) {
+    async convert(bytes, { kind, timeout: jobTimeout, pdfa }) {
       const ext = OFFICE_KINDS[kind];
       if (!ext) throw new OpenDocumentsError('INVALID_OPTION', `LibreOffice does not convert ${kind}.`);
       const slot = await acquire();
@@ -136,7 +144,8 @@ export async function createLibreOffice(options = {}) {
         const result = await run(binary, [
           '--headless', '--norestore', '--nologo', '--nodefault', '--nolockcheck', '--nofirststartwizard',
           `-env:UserInstallation=${pathToFileURL(slot.profile).href}`,
-          '--convert-to', 'pdf', '--outdir', job, input,
+          '--convert-to', pdfa ? `pdf:${FILTERS[kind] ?? 'writer_pdf_Export'}:${JSON.stringify({ SelectPdfVersion: { type: 'long', value: String(pdfa) } })}` : 'pdf',
+          '--outdir', job, input,
         ], { timeout: jobTimeout ?? timeout, cwd: job, env: minimalEnv() });
         if (result.timedOut) {
           slot.ready = false; // a killed LibreOffice can leave its profile half written
