@@ -86,6 +86,10 @@ export const OPERATIONS = {
   'add-form-fields': { files: 'one', run: async ([f], o) => pdf(await od.addFormFields(f, o.fields, o)) },
   flatten: { files: 'one', run: async ([f], o) => pdf(await od.flatten(f, o)) },
 
+  // PDF/A
+  'check-pdfa': { files: 'one', run: async ([f], o) => json(await od.checkPdfA(f, o)) },
+  'to-pdfa': { files: 'one', run: async ([f], o) => pdf(await od.toPdfA(f, o)) },
+
   // two versions of a document: the first file, then the second
   'compare-text': { files: 'many', run: async (files, o) => json(await od.compareText(...two(files, 'compare-text'), o)) },
   'compare-visual': {

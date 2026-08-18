@@ -68,6 +68,8 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `merge` (several files; `items` in options gives each one `pages` or `password`), `extract-pages`, `remove-pages`, `reorder`, `rotate`, `slice`, `crop`, `n-up`, `insert-blank-pages` | PDF |
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
+| `check-pdfa` (`part`) | JSON: what the file claims and the common PDF/A problems found |
+| `to-pdfa` (`part`) | PDF/A as far as it can be made without changing the pages; `POST /v1/convert` takes `pdfa` too |
 | `compare-text`, `compare-visual` (two files: first version, then second) | JSON; with `images`, `compare-visual` adds each page's picture as base64 `png` |
 | `compare-report` (two files) | PDF: both versions side by side with the changes marked |
 | `form-fields` | JSON: every field with its value and place |

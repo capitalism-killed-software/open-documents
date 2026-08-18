@@ -34,6 +34,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, letterheads
   and backgrounds from another PDF (over or under the page), metadata, bookmarks
 - **Forms:** read every field, fill them by name, add new ones, flatten
+- **PDF/A:** make it from office files, web pages and images, fix up existing PDFs, and check
+  them for the common problems
 - **Compare:** the words that changed between two versions and where they are, how much each
   page changed, and a side-by-side report with the changes marked
 - **Security:** AES-256 encryption with permissions, and removing it
@@ -107,7 +109,7 @@ document in view with the library and shows the result.
 - **Edit:** images, links, existing text
 - **To PDF:** EPUB
 - **From PDF:** Word with flowing text
-- **More:** annotations, form designer, PDF/A,
+- **More:** annotations, form designer, full PDF/A validation (veraPDF),
   true redaction, digital signatures, fonts beyond Latin
 - **Viewer:** signing, redaction, designing forms
 

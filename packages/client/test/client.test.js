@@ -148,3 +148,8 @@ test('compressImages over the server', async () => {
   const scan = await imagesToPdf((await renderPages(doc.bytes, { pages: [1], dpi: 300 })).map((p) => p.data), { pageSize: 'fit', dpi: 300 });
   assert.ok((await client.compressImages(scan, { dpi: 100 })).length < scan.length);
 });
+
+test('pdf/a from the client', async () => {
+  const fixed = await client.toPdfA(doc.bytes);
+  assert.deepEqual((await client.checkPdfA(fixed)).claimed, { part: 2, conformance: 'B' });
+});

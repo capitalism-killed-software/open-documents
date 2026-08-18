@@ -367,3 +367,19 @@ test('compress-images scales a scan down', async () => {
   assert.equal((await run(['compress-images', file, '--dpi', '100', '--quality', '70', '-o', out])).code, 0);
   assert.ok((await readFile(out)).length < scan.length);
 });
+
+test('pdfa fixes what it can and says what is still missing', async () => {
+  const out = join(dir, 'archive.pdf');
+  const fixed = await run(['pdfa', pdf, '--part', '2', '-o', out]);
+  assert.equal(fixed.code, 0);
+  assert.match(fixed.out, /^Says it is PDF\/A-2b\.$/m);
+  assert.match(fixed.out, /^- The font Helvetica is not embedded\. \(pages 1, 2, 3\)$/m);
+  const checked = await run(['pdfa', pdf, '--check']);
+  assert.match(checked.out, /^Does not say it is PDF\/A\.$/m);
+  assert.match(checked.out, /no PDF\/A output intent/i);
+  const png = join(dir, 'picture.png');
+  await writeFile(png, pngImage());
+  const image = join(dir, 'picture-a.pdf');
+  assert.equal((await run(['convert', png, '--pdfa', '2', '-o', image])).code, 0);
+  assert.match((await run(['pdfa', image, '--check'])).out, /No common problems found/);
+});

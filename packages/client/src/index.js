@@ -146,6 +146,9 @@ export function createClient(options) {
     /** @param {Input} input @param {object[]} fields */
     addFormFields: (input, fields, opts = {}) => run('add-form-fields', input, { ...opts, fields }),
     flatten: one('flatten'),
+    // PDF/A
+    checkPdfA: one('check-pdfa'),
+    toPdfA: one('to-pdfa'),
     // two versions of a document
     /** @param {Input} a @param {Input} b */
     compareText: (a, b, opts = {}) => run('compare-text', [a, b], opts),

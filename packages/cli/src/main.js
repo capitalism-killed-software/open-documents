@@ -8,7 +8,7 @@ const USAGE = `opendocs: inspect, render and change PDF files
 
 Convert to PDF (Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text, HTML, Markdown,
 email, JPEG, PNG, TIFF; needs LibreOffice for office files and Chromium for web pages):
-  opendocs convert <file> [-o out.pdf] [--paper letter|a4|legal|a3|a5] [--landscape] [--javascript]
+  opendocs convert <file> [-o out.pdf] [--paper letter|a4|legal|a3|a5] [--landscape] [--javascript] [--pdfa 2]
   opendocs convert --url https://example.com -o page.pdf [--allow-host intranet.local]
 
 Out of PDF (keeps each page's layout: text boxes for the text, a picture for the rest):
@@ -25,6 +25,10 @@ Look:
   opendocs info <file.pdf> [--json]
   opendocs text <file.pdf> [--pages 1-3,5]
   opendocs render <file.pdf> [--page N | --pages 1-3] [--dpi N | --width PX] [-o out.png]
+
+PDF/A (the archive form of PDF):
+  opendocs pdfa <file.pdf> [--part 2]            add what PDF/A needs, then say what is still missing
+  opendocs pdfa <file.pdf> --check [--part 2]    only say what is missing
 
 Compare two versions:
   opendocs compare <before.pdf> <after.pdf> [--json] [--exact] [-o report.pdf]
@@ -140,6 +144,9 @@ const OPTIONS = {
   'no-background': { type: 'boolean' },
   exact: { type: 'boolean' },
   quality: { type: 'string' },
+  pdfa: { type: 'string' },
+  part: { type: 'string' },
+  check: { type: 'boolean' },
   'password-b': { type: 'string' },
   values: { type: 'string' },
   fields: { type: 'string' },
@@ -166,6 +173,7 @@ const COMMANDS = {
   render: { files: 'one', run: render },
   merge: { files: 'many', run: merge },
   compare: { files: 'many', run: compare },
+  pdfa: { files: 'one', run: pdfa },
   split: { files: 'one', run: split },
   extract: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.extractPages(bytes, required(ctx, 'pages'), pw)) },
   remove: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.removePages(bytes, required(ctx, 'pages'), pw)) },
@@ -532,6 +540,24 @@ async function ocr(ctx) {
 }
 
 /** @param {Context} ctx */
+async function pdfa(ctx) {
+  const { files, values, io } = ctx;
+  const part = /** @type {1 | 2 | 3} */ (values.part === undefined ? 2 : integer(values.part, '--part'));
+  let bytes = await readFile(files[0]);
+  if (!values.check) {
+    const target = values.output ?? `${stem(files[0])}-pdfa.pdf`;
+    refuseOverwrite(target, files);
+    bytes = await od.toPdfA(bytes, { part });
+    await writeFile(target, bytes);
+    io.out(`${target}\n`);
+  }
+  const { claimed, problems } = await od.checkPdfA(bytes, { part, password: values.password });
+  io.out(claimed ? `Says it is PDF/A-${claimed.part}${claimed.conformance.toLowerCase()}.\n` : 'Does not say it is PDF/A.\n');
+  for (const p of problems) io.out(`- ${p.message}${p.pages ? ` (page${p.pages.length > 1 ? 's' : ''} ${p.pages.join(', ')})` : ''}\n`);
+  io.out(problems.length ? 'A full validator such as veraPDF would fail it.\n' : 'No common problems found; a full validator such as veraPDF gives the final word.\n');
+}
+
+/** @param {Context} ctx */
 async function compare({ files, values, io }) {
   const [a, b] = await Promise.all(files.map((f) => readFile(f)));
   const options = { exact: values.exact, password: values.password, passwordB: values['password-b'] };
@@ -615,7 +641,8 @@ async function convert({ files, values, io }) {
     }
     const target = values.output ?? `${stem(files[0])}.pdf`;
     refuseOverwrite(target, files);
-    const out = await converter.toPdf(await readFile(files[0]), { ...layout, filename: basename(files[0]), javascript: values.javascript });
+    const pdfa = values.pdfa === undefined ? undefined : /** @type {1 | 2 | 3} */ (integer(values.pdfa, '--pdfa'));
+    const out = await converter.toPdf(await readFile(files[0]), { ...layout, filename: basename(files[0]), javascript: values.javascript, pdfa });
     await writeFile(target, out);
     await report(io, target, out);
   } finally {

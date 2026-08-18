@@ -86,6 +86,19 @@ way it looks stay in step, and the file keeps its encryption.
 | `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`. Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
 | `flatten(pdf, { pages, password })` | Fields and annotations become part of the pages: they look the same and can no longer be changed. When no field is left, the form itself is removed. |
 
+## PDF/A
+
+PDF/A is the form of PDF made for keeping: everything needed to show the file is inside it.
+
+| Function | What it does |
+|---|---|
+| `checkPdfA(pdf, { part, password })` | `{ claimed, problems }`: what the file says it is (`{ part, conformance }` or `null`) and the usual reasons it would fail: `ENCRYPTED`, `NO_PDFA_ID`, `NO_OUTPUT_INTENT`, `FONT_NOT_EMBEDDED` (with `pages`), `JAVASCRIPT`, `ATTACHMENTS` (in parts 1 and 2). An empty list means none of these were found, not that every PDF/A rule passes: a full validator such as veraPDF has the final word. |
+| `toPdfA(pdf, { part })` | PDF/A-1b, 2b (default) or 3b as far as it can go without changing how pages look: PDF/A metadata matching the document's information, an sRGB output intent, document JavaScript removed, a file identifier, no object streams. Fonts that are not embedded cannot be fixed here; `checkPdfA()` reports them. Encrypted files are refused. |
+
+From other formats, `toPdf(file, { pdfa: 2 })` in `@open-documents/node` makes PDF/A directly:
+office files through LibreOffice's own PDF/A export, which embeds every font; web pages, email,
+Markdown and images are made as usual and then passed through `toPdfA()`.
+
 ## Compare
 
 Two versions of a document. Text is compared across the whole document, so text that only moved
@@ -143,7 +156,7 @@ await converter.close();
 
 | Method | What it does |
 |---|---|
-| `toPdf(file, options)` | Any supported file to PDF: Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text (LibreOffice); HTML, Markdown, `.eml` and Outlook `.msg` (Chromium); JPEG and PNG (no other program); TIFF, GIF, WebP, BMP (LibreOffice). `filename` helps with CSV, Markdown and text. Layout options as below. |
+| `toPdf(file, options)` | Any supported file to PDF: Word, Excel, PowerPoint, OpenDocument, RTF, CSV, text (LibreOffice); HTML, Markdown, `.eml` and Outlook `.msg` (Chromium); JPEG and PNG (no other program); TIFF, GIF, WebP, BMP (LibreOffice). `filename` helps with CSV, Markdown and text. `pdfa: 1`, `2` or `3` makes PDF/A. Layout options as below. |
 | `htmlToPdf(html, { assets, javascript, ... })` | `assets` are the files the HTML refers to by relative path. Scripts are off unless `javascript: true`. The page cannot reach the network. |
 | `markdownToPdf(markdown, { allowHtml, ... })` | With a clean print style. Raw HTML in the Markdown shows as text unless `allowHtml`. |
 | `urlToPdf(url, { allowHosts, ... })` | A live page, through a proxy that refuses private addresses. |

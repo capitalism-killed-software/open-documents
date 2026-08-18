@@ -128,3 +128,16 @@ test('compare two versions over http', async () => {
   const one = await post('compare-text', [a]);
   assert.deepEqual([one.statusCode, one.json().error.code], [400, 'INVALID_INPUT']);
 });
+
+test('pdf/a over http: check, fix, and convert straight to it', async () => {
+  const check = await post('check-pdfa', [doc.bytes]);
+  assert.deepEqual(check.json().problems.map((/** @type {any} */ p) => p.code), ['FONT_NOT_EMBEDDED', 'NO_PDFA_ID', 'NO_OUTPUT_INTENT']);
+  const fixed = await post('to-pdfa', [doc.bytes], { part: 3 });
+  assert.equal(fixed.statusCode, 200);
+  const { pngImage } = await import('@open-documents/fixtures');
+  const body = await form([{ filename: 'p.png', data: pngImage() }], { pdfa: 2 });
+  const converted = await app.inject({ method: 'POST', url: '/v1/convert', ...body });
+  assert.equal(converted.statusCode, 200, converted.body);
+  const again = await post('check-pdfa', [new Uint8Array(converted.rawPayload)]);
+  assert.deepEqual(again.json(), { claimed: { part: 2, conformance: 'B' }, problems: [] });
+});
