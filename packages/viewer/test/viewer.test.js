@@ -400,3 +400,77 @@ test('forms: read the fields, fill them from code and by typing, save', { skip }
     await page.close();
   }
 });
+
+test('design: draw a text field and a dropdown, name them, and they are real fields', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('design', 'true'));
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await inViewer(page, 'button[data-field-tool="text"]').click();
+    const first = inViewer(page, '.page[data-page="1"]');
+    const at = /** @type {{ x: number, y: number }} */ (await first.boundingBox());
+    await page.mouse.move(at.x + 100, at.y + 120);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 250, at.y + 140, { steps: 5 });
+    await page.mouse.up();
+    const nameBox = inViewer(page, '.draft-panel input[name="field-name"]');
+    assert.equal(await nameBox.inputValue(), 'text1');
+    await nameBox.fill('applicant');
+    await inViewer(page, '.draft-panel button[type="submit"]').click();
+    await page.waitForFunction((list) => list.some((c) => c.type === 'fields' && c.names?.[0] === 'applicant'), changes);
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).formFields().some((/** @type {any} */ f) => f.name === 'applicant'));
+
+    // a dropdown with options, by clicking once
+    await inViewer(page, 'button[data-field-tool="dropdown"]').click();
+    const again = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    await page.mouse.click(again.x + 100, again.y + 200);
+    await inViewer(page, '.draft-panel input[name="field-options"]').fill('small, large');
+    await inViewer(page, '.draft-panel button[type="submit"]').click();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).formFields().some((/** @type {any} */ f) => f.name === 'choice1'));
+
+    // a name already taken is refused, with the reason shown
+    await inViewer(page, 'button[data-field-tool="text"]').click();
+    const third = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    await page.mouse.click(third.x + 300, third.y + 300);
+    await inViewer(page, '.draft-panel input[name="field-name"]').fill('applicant');
+    await inViewer(page, '.draft-panel button[type="submit"]').click();
+    await inViewer(page, '.draft-error').waitFor();
+    assert.match(await inViewer(page, '.draft-error').innerText(), /already a field named "applicant"/);
+    await inViewer(page, '.draft-panel button[type="button"]').click();
+
+    const saved = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const { getFormFields } = await import('@open-documents/core');
+    const fields = await getFormFields(new Uint8Array(saved));
+    const applicant = fields.find((f) => f.name === 'applicant');
+    const choice = fields.find((f) => f.name === 'choice1');
+    assert.equal(applicant?.type, 'text');
+    assert.deepEqual(choice?.options, ['small', 'large']);
+    const zoom = await page.evaluate(() => {
+      const el = /** @type {HTMLElement} */ (document.getElementById('v')?.shadowRoot?.querySelector('.page[data-page="1"]'));
+      return el.getBoundingClientRect().width / 612;
+    });
+    const w = /** @type {import('@open-documents/core').FormField} */ (applicant).widgets[0];
+    assert.ok(Math.abs(w.x - 100 / zoom) < 3 && Math.abs(w.y - 120 / zoom) < 3 && Math.abs(w.width - 150 / zoom) < 3, JSON.stringify(w));
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('addFormFields from code', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const result = await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      await v.addFormFields([{ type: 'checkbox', name: 'agree', page: 2, x: 72, y: 100, width: 14, height: 14 }]);
+      return v.formFields().map((/** @type {any} */ f) => f.name);
+    });
+    assert.deepEqual(result, ['agree']);
+  } finally {
+    await page.close();
+  }
+});

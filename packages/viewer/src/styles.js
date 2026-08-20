@@ -44,6 +44,16 @@ export const STYLES = `
 /* page images are pictures of the page, not things to drag: a native image drag would cancel
    the pointer events that drawing and selecting rely on */
 .page img { pointer-events: none; -webkit-user-drag: none; user-select: none; }
+/* the form designer: a layer over the page that takes the pointer while a field tool is picked */
+.design-layer { position: absolute; inset: 0; z-index: 10; cursor: crosshair; touch-action: none; }
+.draft-box { position: absolute; border: 1.5px dashed var(--od-accent); background: rgba(11, 99, 206, 0.08); pointer-events: none; }
+.draft-panel { position: absolute; z-index: 11; display: flex; flex-direction: column; gap: 6px; min-width: 200px; padding: 8px; background: var(--od-bar); border: 1px solid var(--od-line); border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); cursor: default; }
+.draft-panel label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--od-muted); }
+.draft-panel input { font: inherit; height: 26px; border: 1px solid var(--od-line); border-radius: 4px; padding: 0 6px; color: var(--od-ink); }
+.draft-buttons { display: flex; gap: 6px; }
+.draft-buttons button { font: inherit; height: 28px; padding: 0 10px; border: 1px solid var(--od-line); border-radius: 5px; background: var(--od-bar); cursor: pointer; }
+.draft-buttons button[type="submit"] { background: var(--od-accent); border-color: var(--od-accent); color: #fff; }
+.draft-error { margin: 0; color: #b3261e; font-size: 12px; }
 .message { margin: auto; padding: 24px; color: var(--od-muted); text-align: center; }
 .message.error { color: #b3261e; }
 `;

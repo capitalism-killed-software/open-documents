@@ -19,8 +19,10 @@ Pages, thumbnails, zoom, page moves, search with highlights, text selection, and
 `annotate="true"` a second toolbar for highlights, underlines, strike-outs, pen drawing, text
 boxes, notes and boxes, with undo and redo. With `organize="true"`, the thumbnails get buttons
 to turn and delete pages, and can be dragged to put pages in a new order; annotations go with
-their page. Form fields can be filled in on the page or from code. `save()` writes everything
-into the PDF.
+their page. Form fields can be filled in on the page or from code. With `design="true"`, a
+toolbar adds new fields: pick text field, check box, dropdown or list, drag a box on the page
+(or click for a usual size), name it, and it is a real field. `save()` writes everything into
+the PDF.
 
 ```js
 const viewer = document.querySelector('od-viewer');
@@ -35,6 +37,7 @@ await viewer.rotatePages([2], 90); await viewer.deletePages([4]); await viewer.m
 viewer.formFields();                                   // [{ name, type, value, readOnly, options }]
 viewer.getFormValues();                                // { name: 'Sample Person', agree: 'Yes' }
 await viewer.setFormValues({ notes: 'Filled in', colour: 'blue' });
+await viewer.addFormFields([{ type: 'text', name: 'email', page: 1, x: 72, y: 600, width: 200, height: 20 }]);
 viewer.addEventListener('od-page', (e) => console.log(e.detail.page, e.detail.pageCount));
 viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.annotation));
 ```
@@ -48,13 +51,15 @@ viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.
 | `annotate` | `"true"` to show the annotation tools |
 | `author` | the name written into new annotations |
 | `organize` | `"true"` to turn, delete and move pages from the thumbnails |
+| `design` | `"true"` to draw new form fields on the pages |
 | `fonts-url` | where you serve EmbedPDF's fallback fonts, for files that use Chinese, Japanese, Korean, Arabic or Hebrew fonts without including them. Nothing is fetched from anywhere else. |
 
 Events: `od-load` `{ pageCount, name }`, `od-page` `{ page, pageCount }`,
 `od-change` `{ type, page, annotation }` (`create`, `update` or `delete`; `ink`, `highlight`,
 `text` and so on) or `{ type: 'pages', action, pages }` (`rotate`, `delete`, `move`) or
-`{ type: 'field', page, name, value }`, `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
+`{ type: 'field', page, name, value }` or `{ type: 'fields', action: 'add', names, pages }`, `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
 `ENGINE_ERROR`).
 
 Style it from outside with `--od-height`, `--od-bg`, `--od-bar`, `--od-ink`, `--od-muted`,
-`--od-line` and `--od-accent`, or the `toolbar` and `sidebar` parts.
+`--od-line` and `--od-accent`, or the `toolbar`, `sidebar`, `annotation-toolbar` and
+`field-toolbar` parts.

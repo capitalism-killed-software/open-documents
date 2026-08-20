@@ -12,6 +12,8 @@
 // annotation } for annotations, { type: 'pages', action, pages } for page changes and
 // { type: 'field', page, name, value } for form fields, od-error { code, message }.
 // The organize attribute ("true") adds rotate, delete and drag-to-move to the thumbnails.
+// The design attribute ("true") adds tools to draw new form fields on the pages; addFormFields()
+// does the same from code. New fields come as od-change { type: 'fields', action: 'add', names }.
 import { h, render } from 'preact';
 import { App } from './app.js';
 import { STYLES } from './styles.js';
@@ -19,9 +21,13 @@ import { ZoomMode } from '@embedpdf/plugin-zoom';
 import * as core from '@open-documents/core';
 
 /** @typedef {Uint8Array | ArrayBuffer | Blob | string | URL} PdfSource */
+/**
+ * @typedef {{ type: 'text' | 'checkbox' | 'dropdown' | 'list', name: string, page: number, x: number, y: number,
+ *   width: number, height: number, options?: string[], value?: string | boolean | string[], required?: boolean }} NewField
+ */
 
 export class OdViewer extends HTMLElement {
-  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize'];
+  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize', 'design'];
 
   constructor() {
     super();
@@ -35,6 +41,10 @@ export class OdViewer extends HTMLElement {
       rotate: (/** @type {number} */ page, /** @type {number} */ angle) => this.rotatePages([page], angle),
       remove: (/** @type {number} */ page) => this.deletePages([page]),
       move: (/** @type {number} */ from, /** @type {number} */ to) => this.movePage(from, to),
+    };
+    this.controller.design = {
+      add: (/** @type {NewField} */ field) => this.addFormFields([field]),
+      names: () => this.formFields().map((/** @type {any} */ f) => f.name),
     };
     /** @type {{ page: number, pageCount: number }} */
     this.state = { page: 0, pageCount: 0 };
@@ -213,9 +223,20 @@ export class OdViewer extends HTMLElement {
   }
 
   /**
+   * Add form fields, placed in points on the page as shown: { type, name, page, x, y, width,
+   * height, options, value, required }. type is text, checkbox, dropdown or list.
+   *
+   * @param {NewField[]} fields
+   */
+  async addFormFields(fields) {
+    const pages = [...new Set(fields.map((f) => f.page))];
+    return this.#reshape({ type: 'fields', action: 'add', pages, names: fields.map((f) => f.name) }, (bytes) => core.addFormFields(bytes, fields), this.page);
+  }
+
+  /**
    * Save what is shown, change it with the library, and show the result where the reader was.
    *
-   * @param {{ action: string, pages: number[] }} change
+   * @param {{ type?: string, action: string, pages: number[], names?: string[] }} change
    * @param {(bytes: Uint8Array) => Promise<Uint8Array>} op
    * @param {number} page  where to be afterwards
    */
@@ -257,6 +278,7 @@ export class OdViewer extends HTMLElement {
           annotate: this.getAttribute('annotate') === 'true',
           author: this.getAttribute('author') ?? '',
           organize: this.getAttribute('organize') === 'true',
+          design: this.getAttribute('design') === 'true',
           controller: this.controller,
           pending: this.pending,
         }),
