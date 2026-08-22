@@ -66,9 +66,14 @@ test('a document that takes too long is stopped, and the next one still works', 
   try {
     assert.match(await docling.version(), /^\d+\.\d+/);
     const doc = await textDocument({ pages: 1 });
-    await assert.rejects(docling.convert(doc.bytes, { to: ['markdown'], timeout: 1 }), { code: 'TIMEOUT' });
-    const again = await docling.convert(doc.bytes, { to: ['text'] });
-    assert.match(/** @type {string} */ (again.text), /quick brown fox/);
+    // the next request is sent at once, before the stopped worker has finished exiting
+    const [late, again] = await Promise.allSettled([
+      docling.convert(doc.bytes, { to: ['markdown'], timeout: 1 }),
+      docling.convert(doc.bytes, { to: ['text'] }),
+    ]);
+    assert.equal(late.status === 'rejected' && /** @type {any} */ (late.reason).code, 'TIMEOUT');
+    assert.equal(again.status, 'fulfilled', again.status === 'rejected' ? String(again.reason) : '');
+    assert.match(/** @type {string} */ (/** @type {PromiseFulfilledResult<any>} */ (again).value.text), /quick brown fox/);
   } finally {
     await docling.close();
   }

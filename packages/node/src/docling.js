@@ -72,7 +72,7 @@ export async function createDocling(options = {}) {
   let nextId = 1;
   let stderr = '';
   let closed = false;
-  /** @type {Map<number, { resolve: (v: any) => void, reject: (e: Error) => void }>} */
+  /** @type {Map<number, { resolve: (v: any) => void, reject: (e: Error) => void, proc: import('node:child_process').ChildProcess }>} */
   const waiting = new Map();
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve();
@@ -121,9 +121,11 @@ export async function createDocling(options = {}) {
     proc.stderr.on('data', (chunk) => {
       stderr = (stderr + chunk).slice(-STDERR_KEEP);
     });
+    // only this process's own requests: a replaced worker can stop after its successor started
     const gone = (/** @type {Error} */ error) => {
       if (child === proc) child = null;
       for (const [id, entry] of waiting) {
+        if (entry.proc !== proc) continue;
         waiting.delete(id);
         entry.reject(error);
       }
@@ -160,6 +162,7 @@ export async function createDocling(options = {}) {
           reject(new OpenDocumentsError('TIMEOUT', `Docling took longer than ${Math.round(limit / 1000)} seconds.`));
         }, limit);
         waiting.set(id, {
+          proc,
           resolve: (v) => {
             clearTimeout(timer);
             resolve(v);
