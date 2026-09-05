@@ -260,6 +260,21 @@ export class Engine {
   }
 
   /**
+   * @param {number} count
+   * @param {(ptr: number) => unknown} call  receives a pointer to `count` doubles
+   * @returns {number[]}
+   */
+  readDoubles(count, call) {
+    const ptr = this.malloc(count * 8);
+    try {
+      call(ptr);
+      return Array.from({ length: count }, (_, i) => this.wasm.getValue(ptr + i * 8, 'double'));
+    } finally {
+      this.free(ptr);
+    }
+  }
+
+  /**
    * Write the whole document out again, without incremental updates.
    *
    * @param {number} doc

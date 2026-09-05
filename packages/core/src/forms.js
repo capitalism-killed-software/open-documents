@@ -241,7 +241,7 @@ async function dropEmptyForm(bytes) {
  * @param {(form: number) => T} use
  * @returns {T}
  */
-function withForm(pdf, doc, use) {
+export function withForm(pdf, doc, use) {
   const { fn } = pdf;
   const info = fn.PDFiumExt_OpenFormFillInfo();
   const form = fn.PDFiumExt_InitFormFillEnvironment(doc, info);
@@ -266,7 +266,7 @@ function withForm(pdf, doc, use) {
  * @param {(page: number) => T} use
  * @returns {T}
  */
-function withFormPage(pdf, doc, form, index, use) {
+export function withFormPage(pdf, doc, form, index, use) {
   return pdf.withPage(doc, index, (page) => {
     pdf.fn.FORM_OnAfterLoadPage(page, form);
     try {
