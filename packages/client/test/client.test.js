@@ -153,3 +153,10 @@ test('pdf/a from the client', async () => {
   const fixed = await client.toPdfA(doc.bytes);
   assert.deepEqual((await client.checkPdfA(fixed)).claimed, { part: 2, conformance: 'B' });
 });
+
+test('redaction from the client', async () => {
+  const words = (await textDocument({ pages: 1, lines: () => ['Ring Sam Sample now'] })).bytes;
+  const out = await client.redact(words, { text: ['Sam Sample'] });
+  assert.equal((await extractText(out))[0].text, 'Ring now');
+  assert.equal((await client.verifyRedaction(words, { text: ['Sam Sample'] })).ok, false);
+});

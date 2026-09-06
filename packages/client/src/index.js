@@ -146,6 +146,9 @@ export function createClient(options) {
     /** @param {Input} input @param {object[]} fields */
     addFormFields: (input, fields, opts = {}) => run('add-form-fields', input, { ...opts, fields }),
     flatten: one('flatten'),
+    // redaction (the server takes words, not patterns)
+    redact: one('redact'),
+    verifyRedaction: one('verify-redaction'),
     // PDF/A
     checkPdfA: one('check-pdfa'),
     toPdfA: one('to-pdfa'),

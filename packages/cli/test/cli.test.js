@@ -383,3 +383,18 @@ test('pdfa fixes what it can and says what is still missing', async () => {
   assert.equal((await run(['convert', png, '--pdfa', '2', '-o', image])).code, 0);
   assert.match((await run(['pdfa', image, '--check'])).out, /No common problems found/);
 });
+
+test('redact takes words, patterns and areas out, and says it checked', async () => {
+  const file = join(dir, 'statement.pdf');
+  await writeFile(file, (await textDocument({ pages: 1, lines: () => ['Card 4111 2222 3333 4444 for Sam Sample', 'Keep this line'] })).bytes);
+  const out = join(dir, 'statement-redacted.pdf');
+  const done = await run(['redact', file, '--find', 'Sam Sample', '--pattern', '\\d{4}( \\d{4}){3}', '-o', out]);
+  assert.equal(done.code, 0, done.err);
+  assert.match(done.out, /^2 boxes drawn\.$/m);
+  assert.match(done.out, /^Checked: nothing redacted is left in the file\.$/m);
+  assert.equal((await extractText(await readFile(out)))[0].text, 'Card for\nKeep this line');
+  const checked = await run(['verify-redaction', file, '--find', 'Sam Sample']);
+  assert.match(checked.out, /^- "Sam Sample" is still on page 1\.$/m);
+  assert.equal((await run(['redact', file, '--area', '1,2,3', '-o', join(dir, 'x.pdf')])).code, 1);
+  assert.equal((await run(['redact', file, '--pattern', '(', '-o', join(dir, 'y.pdf')])).code, 1);
+});

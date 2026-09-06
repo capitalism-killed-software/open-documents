@@ -141,3 +141,15 @@ test('pdf/a over http: check, fix, and convert straight to it', async () => {
   const again = await post('check-pdfa', [new Uint8Array(converted.rawPayload)]);
   assert.deepEqual(again.json(), { claimed: { part: 2, conformance: 'B' }, problems: [] });
 });
+
+test('redaction over http takes words, not patterns', async () => {
+  const { textDocument } = await import('@open-documents/fixtures');
+  const doc = (await textDocument({ pages: 1, lines: () => ['Ring Sam Sample now'] })).bytes;
+  const res = await post('redact', [doc], { text: ['Sam Sample'] });
+  assert.equal(res.statusCode, 200, res.body);
+  assert.equal((await extractText(new Uint8Array(res.rawPayload)))[0].text, 'Ring now');
+  const checked = await post('verify-redaction', [new Uint8Array(res.rawPayload)], { text: ['Sam Sample'] });
+  assert.deepEqual(checked.json(), { ok: true, problems: [] });
+  const regex = await post('redact', [doc], { text: [{ source: '.*' }] });
+  assert.deepEqual([regex.statusCode, regex.json().error.code], [400, 'INVALID_OPTION']);
+});

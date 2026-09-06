@@ -86,6 +86,10 @@ export const OPERATIONS = {
   'add-form-fields': { files: 'one', run: async ([f], o) => pdf(await od.addFormFields(f, o.fields, o)) },
   flatten: { files: 'one', run: async ([f], o) => pdf(await od.flatten(f, o)) },
 
+  // redaction: literal words only, never patterns, so a request cannot make the server spin
+  redact: { files: 'one', run: async ([f], o) => pdf(await od.redact(f, redactOptions(o))) },
+  'verify-redaction': { files: 'one', run: async ([f], o) => json(await od.verifyRedaction(f, redactOptions(o))) },
+
   // PDF/A
   'check-pdfa': { files: 'one', run: async ([f], o) => json(await od.checkPdfA(f, o)) },
   'to-pdfa': { files: 'one', run: async ([f], o) => pdf(await od.toPdfA(f, o)) },
@@ -154,4 +158,14 @@ function structure(o) {
 function two(files, name) {
   if (files.length !== 2) throw new od.OpenDocumentsError('INVALID_INPUT', `${name} takes two files: the first version, then the second.`);
   return [files[0], files[1]];
+}
+
+/**
+ * @param {Record<string, any>} o
+ */
+function redactOptions(o) {
+  if (o.text !== undefined && (!Array.isArray(o.text) || o.text.some((t) => typeof t !== 'string'))) {
+    throw new od.OpenDocumentsError('INVALID_OPTION', 'text must be a list of words to redact. Patterns are not taken over HTTP.');
+  }
+  return { areas: o.areas, text: o.text, ignoreCase: o.ignoreCase, pages: o.pages, color: o.color, metadata: o.metadata, password: o.password };
 }

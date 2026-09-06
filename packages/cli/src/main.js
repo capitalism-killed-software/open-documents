@@ -26,6 +26,11 @@ Look:
   opendocs text <file.pdf> [--pages 1-3,5]
   opendocs render <file.pdf> [--page N | --pages 1-3] [--dpi N | --width PX] [-o out.png]
 
+Redact (takes out for good what is under the boxes, then checks the result):
+  opendocs redact <file.pdf> [--find "Sam Sample"]... [--pattern "\\d{4} \\d{4}"]... [--area page,x,y,w,h]...
+                  [--ignore-case] [--color #000000] [--metadata]
+  opendocs verify-redaction <file.pdf> [--find ...] [--pattern ...] [--area ...]
+
 PDF/A (the archive form of PDF):
   opendocs pdfa <file.pdf> [--part 2]            add what PDF/A needs, then say what is still missing
   opendocs pdfa <file.pdf> --check [--part 2]    only say what is missing
@@ -145,6 +150,11 @@ const OPTIONS = {
   exact: { type: 'boolean' },
   quality: { type: 'string' },
   pdfa: { type: 'string' },
+  find: { type: 'string', multiple: true },
+  pattern: { type: 'string', multiple: true },
+  area: { type: 'string', multiple: true },
+  'ignore-case': { type: 'boolean' },
+  metadata: { type: 'boolean' },
   part: { type: 'string' },
   check: { type: 'boolean' },
   'password-b': { type: 'string' },
@@ -174,6 +184,8 @@ const COMMANDS = {
   merge: { files: 'many', run: merge },
   compare: { files: 'many', run: compare },
   pdfa: { files: 'one', run: pdfa },
+  redact: { files: 'one', run: redactCommand },
+  'verify-redaction': { files: 'one', run: verifyCommand },
   split: { files: 'one', run: split },
   extract: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.extractPages(bytes, required(ctx, 'pages'), pw)) },
   remove: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.removePages(bytes, required(ctx, 'pages'), pw)) },
@@ -537,6 +549,68 @@ async function ocr(ctx) {
   } finally {
     await engine.close();
   }
+}
+
+/**
+ * What to redact from the command line: --find (repeatable), --pattern (a regular expression,
+ * repeatable) and --area page,x,y,width,height (repeatable, points as shown).
+ *
+ * @param {Context} ctx
+ */
+function redaction(ctx) {
+  const { values } = ctx;
+  /** @type {(string | RegExp)[]} */
+  const text = [...(values.find ?? [])];
+  for (const source of values.pattern ?? []) {
+    try {
+      text.push(new RegExp(source, values['ignore-case'] ? 'i' : ''));
+    } catch {
+      throw new od.OpenDocumentsError('INVALID_OPTION', `--pattern ${source} is not a regular expression.`);
+    }
+  }
+  const areas = (values.area ?? []).map((/** @type {string} */ spec) => {
+    const parts = spec.split(',').map(Number);
+    if (parts.length !== 5 || parts.some((n) => !Number.isFinite(n))) throw new od.OpenDocumentsError('INVALID_OPTION', `--area ${spec} should be page,x,y,width,height.`);
+    const [page, x, y, width, height] = parts;
+    return { page, x, y, width, height };
+  });
+  return { text, areas, ignoreCase: values['ignore-case'], password: values.password };
+}
+
+/** @param {Context} ctx */
+async function redactCommand(ctx) {
+  const { files, values, io } = ctx;
+  const what = redaction(ctx);
+  const target = values.output ?? `${stem(files[0])}-redacted.pdf`;
+  refuseOverwrite(target, files);
+  /** @type {any} */
+  let report;
+  const out = await od.redact(await readFile(files[0]), { ...what, color: values.color, metadata: values.metadata, onReport: (r) => (report = r) });
+  await writeFile(target, out);
+  const r = report;
+  io.out(`${target}\n${r.boxes} box${r.boxes === 1 ? '' : 'es'} drawn.\n`);
+  for (const m of r.matches) io.out(`- ${m.pattern}: ${m.count} on page ${m.page}\n`);
+  if (r.rasterised.length) io.out(`Pages ${r.rasterised.join(', ')} did not pass and are now pictures of themselves.\n`);
+  printVerification(io, r.verification);
+}
+
+/** @param {Context} ctx */
+async function verifyCommand(ctx) {
+  const what = redaction(ctx);
+  printVerification(ctx.io, await od.verifyRedaction(await readFile(ctx.files[0]), { ...what, color: ctx.values.color }));
+}
+
+/**
+ * @param {Io} io
+ * @param {{ ok: boolean, problems: { message: string }[] }} result
+ */
+function printVerification(io, result) {
+  if (result.ok) {
+    io.out('Checked: nothing redacted is left in the file.\n');
+    return;
+  }
+  io.out('Checked, and found:\n');
+  for (const p of result.problems) io.out(`- ${p.message}\n`);
 }
 
 /** @param {Context} ctx */
