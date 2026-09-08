@@ -34,6 +34,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, letterheads
   and backgrounds from another PDF (over or under the page), metadata, bookmarks
 - **Forms:** read every field, fill them by name, add new ones, flatten
+- **Redaction:** areas, words and patterns taken out of the file for good (text, image pixels,
+  drawings, form fields, metadata), then checked, with pictures of pages as the fallback
 - **PDF/A:** make it from office files, web pages and images, fix up existing PDFs, and check
   them for the common problems
 - **Compare:** the words that changed between two versions and where they are, how much each
@@ -110,7 +112,7 @@ document in view with the library and shows the result.
 - **To PDF:** EPUB
 - **From PDF:** Word with flowing text
 - **More:** annotations from code, full PDF/A validation (veraPDF),
-  true redaction, digital signatures, fonts beyond Latin
+  digital signatures, fonts beyond Latin
 - **Viewer:** signing, redaction
 
 ## Develop

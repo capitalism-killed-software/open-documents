@@ -86,6 +86,18 @@ way it looks stay in step, and the file keeps its encryption.
 | `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`. Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
 | `flatten(pdf, { pages, password })` | Fields and annotations become part of the pages: they look the same and can no longer be changed. When no field is left, the form itself is removed. |
 
+## Redaction
+
+True redaction: what is under a box is taken out of the file, not covered up.
+
+| Function | What it does |
+|---|---|
+| `redact(pdf, { areas, text, ignoreCase, pages, color, metadata, onReport, password })` | `areas` are boxes as shown, `{ page, x, y, width, height }` in points. `text` is a list of words (strings) or patterns (`RegExp`), found on every page or on `pages`. Under each box, characters are removed (text inside form objects too, such as an OCR layer), image pixels are wiped in the image data, drawings wholly inside are removed, and annotations and form fields there go, values cleared first. An opaque box is drawn in `color` (default black). Matches are also cut out of the document's title, author, subject, keywords and bookmark titles, and the XMP metadata is removed when it holds one; `metadata: true` clears those fields and the XMP whatever they hold. The file is written whole, with no older revisions. Then the result is checked with `verifyRedaction()`; a page that does not pass is replaced by a picture of itself and checked again. `onReport` hears `{ boxes, matches, rasterised, drawingsCrossing, verification }`. Encryption is kept. |
+| `verifyRedaction(pdf, { areas, text, ignoreCase, color, password })` | `{ ok, problems }`, each problem one of `TEXT_UNDER_BOX`, `TEXT_STILL_THERE`, `BOX_MISSING` (with `color`), `ANNOTATION_UNDER_BOX`, `IN_METADATA`, `IN_BOOKMARKS`, `IN_FORM_VALUES`, `IN_FILE` (a match in any stream of the file, decompressed, including strings written in hex), `OLD_REVISIONS`. |
+
+Drawings that pass under a box and out of it are covered, and counted in `drawingsCrossing`.
+Text in fonts that hide their characters cannot be searched; boxes over it still remove it.
+
 ## PDF/A
 
 PDF/A is the form of PDF made for keeping: everything needed to show the file is inside it.
