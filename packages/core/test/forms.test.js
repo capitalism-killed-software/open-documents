@@ -93,7 +93,7 @@ test('bad new fields are refused before any change', async () => {
   const doc = await textDocument({ pages: 1 });
   const ok = { type: /** @type {const} */ ('text'), name: 'a', page: 1, x: 10, y: 10, width: 50, height: 20 };
   await assert.rejects(addFormFields(doc.bytes, []), { code: 'INVALID_OPTION' });
-  await assert.rejects(addFormFields(doc.bytes, [{ ...ok, type: /** @type {any} */ ('signature') }]), { code: 'INVALID_OPTION', message: /type must be/ });
+  await assert.rejects(addFormFields(doc.bytes, [{ ...ok, type: /** @type {any} */ ('radio') }]), { code: 'INVALID_OPTION', message: /type must be/ });
   await assert.rejects(addFormFields(doc.bytes, [{ ...ok, name: 'a.b' }]), { code: 'INVALID_OPTION', message: /without dots/ });
   await assert.rejects(addFormFields(doc.bytes, [ok, ok]), { code: 'INVALID_OPTION', message: /already a field named "a"/ });
   await assert.rejects(addFormFields(form.bytes, [{ ...ok, name: 'name' }]), { code: 'INVALID_OPTION', message: /already/ });

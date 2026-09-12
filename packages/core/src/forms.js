@@ -10,7 +10,7 @@ import { numberIn, pageNumber } from './options.js';
 
 const WIDGET = 20;
 const TYPES = /** @type {const} */ ({ 1: 'button', 2: 'checkbox', 3: 'radio', 4: 'dropdown', 5: 'list', 6: 'text', 7: 'signature' });
-const CREATE = /** @type {const} */ ({ text: 6, checkbox: 2, dropdown: 4, list: 5 });
+const CREATE = /** @type {const} */ ({ text: 6, checkbox: 2, dropdown: 4, list: 5, signature: 7 });
 const FLAG = { readOnly: 1, required: 2, multiline: 1 << 12, password: 1 << 13, editable: 1 << 18, multiSelect: 1 << 21, combo: 1 << 17 };
 const RETURN_KEY = 13;
 const HELVETICA = 4;
@@ -97,7 +97,8 @@ export async function fillForm(input, values, options = {}) {
 
 /**
  * @typedef {object} NewField
- * @property {'text' | 'checkbox' | 'dropdown' | 'list'} type
+ * @property {'text' | 'checkbox' | 'dropdown' | 'list' | 'signature'} type  a signature field is
+ *   left empty, for signing later
  * @property {string} name
  * @property {number} page
  * @property {number} x  points from the left, as shown
@@ -127,6 +128,8 @@ export async function addFormFields(input, fields, options = {}) {
   const bytes = await toPdfBytes(input);
   const pdf = await engine();
   const { fn } = pdf;
+  /** @type {{ field: NewField, box: [number, number, number, number] }[]} */
+  const signatures = [];
   const out = pdf.withDocument(bytes, options, (doc) => {
     withForm(pdf, doc, (form) => {
       const existing = new Set(readFields(pdf, doc, form).map((f) => f.name));
@@ -138,13 +141,17 @@ export async function addFormFields(input, fields, options = {}) {
         seen.add(field.name);
       }
       for (const field of fields) {
+        if (field.type === 'signature') {
+          signatures.push({ field, box: pdf.withPage(doc, field.page - 1, (page) => shownRectToBox(pdf.visibleBox(page), fn.FPDFPage_GetRotation(page), field)) });
+          continue;
+        }
         withFormPage(pdf, doc, form, field.page - 1, (page) => {
           const annot = pdf.withWideString(field.name, (name) => fn.EPDFPage_CreateFormField(page, form, CREATE[field.type], name));
           if (!annot) fail('ENGINE_ERROR', `Could not add the field "${field.name}".`);
           try {
             placeWidget(pdf, page, annot, field);
             fn.FPDFAnnot_SetFlags(annot, ANNOT_PRINT);
-            if (field.type !== 'checkbox') fn.EPDFAnnot_SetDefaultAppearance(annot, HELVETICA, field.fontSize ?? 0, 0, 0, 0);
+            if (field.type !== 'checkbox' && field.type !== 'signature') fn.EPDFAnnot_SetDefaultAppearance(annot, HELVETICA, field.fontSize ?? 0, 0, 0, 0);
             fn.EPDFAnnot_SetBorderStyle(annot, SOLID, 1);
             fn.EPDFAnnot_SetMKColor(annot, 0, 0x80, 0x80, 0x80);
             const flags = (field.readOnly ? FLAG.readOnly : 0) | (field.required ? FLAG.required : 0)
@@ -165,7 +172,37 @@ export async function addFormFields(input, fields, options = {}) {
   // a widget PDFium has just made cannot take the focus until the page is opened again, and
   // values written straight in are not drawn, so starting values are filled in on the saved file
   const toggles = Object.fromEntries(fields.filter((f) => f.value !== undefined && f.value !== false && f.value !== '').map((f) => [f.name, /** @type {string | boolean | string[]} */ (f.value)]));
-  return Object.keys(toggles).length ? fillForm(out, toggles, options) : out;
+  const filled = Object.keys(toggles).length ? await fillForm(out, toggles, options) : out;
+  return signatures.length ? addSignatureFields(filled, signatures) : filled;
+}
+
+/**
+ * Empty signature fields, for signing later. PDFium cannot make them, so they are written into
+ * the form directly; that needs a file without encryption.
+ *
+ * @param {Uint8Array} bytes
+ * @param {{ field: NewField, box: [number, number, number, number] }[]} list
+ */
+async function addSignatureFields(bytes, list) {
+  const { PDFDocument, PDFString } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: true });
+  if (doc.isEncrypted) fail('UNSUPPORTED_SECURITY', 'Signature fields can only be added to files without encryption. Decrypt it first, or let sign() make the field.');
+  const acroForm = doc.getForm().acroForm;
+  for (const { field, box } of list) {
+    const page = doc.getPage(field.page - 1);
+    const widget = doc.context.register(doc.context.obj({
+      Type: 'Annot',
+      Subtype: 'Widget',
+      FT: 'Sig',
+      T: PDFString.of(field.name),
+      Rect: box,
+      F: ANNOT_PRINT,
+      P: page.ref,
+    }));
+    page.node.addAnnot(widget);
+    acroForm.addField(widget);
+  }
+  return doc.save({ useObjectStreams: false, updateFieldAppearances: false });
 }
 
 /**
@@ -500,6 +537,7 @@ function checkNewField(field, pageCount) {
   if ((field.type === 'dropdown' || field.type === 'list') && (!Array.isArray(field.options) || !field.options.length || field.options.some((o) => typeof o !== 'string'))) {
     fail('INVALID_OPTION', `Field "${field.name}" needs options, a list of strings.`);
   }
+  if (field.type === 'signature' && field.value !== undefined) fail('INVALID_OPTION', `Field "${field.name}" is a signature field: it is filled by signing, not with a value.`);
   if (field.value !== undefined) {
     const chosen = Array.isArray(field.value) ? field.value : [field.value];
     const ok = field.type === 'checkbox' ? typeof field.value === 'boolean'
