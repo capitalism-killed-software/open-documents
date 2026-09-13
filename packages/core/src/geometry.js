@@ -86,3 +86,26 @@ export function pagePointToShown(box, quarterTurns, x, y) {
       return [y1 - y, x1 - x];
   }
 }
+
+/**
+ * A box as people see it on a page, in the page's own coordinates: for tools that place things
+ * in PDF user space, such as signature fields.
+ *
+ * @param {import('./input.js').DocumentInput} input
+ * @param {{ page: number, x: number, y: number, width: number, height: number }} area
+ * @param {{ password?: string }} [options]
+ * @returns {Promise<Box>} left, bottom, right, top
+ */
+export async function areaToPageBox(input, area, options = {}) {
+  const { engine } = await import('./engine/pdfium.js');
+  const { toPdfBytes } = await import('./input.js');
+  const { pageNumber, numberIn } = await import('./options.js');
+  const bytes = await toPdfBytes(input);
+  const pdf = await engine();
+  return pdf.withDocument(bytes, options, (doc) => {
+    pageNumber(area?.page, 'page', pdf.fn.FPDF_GetPageCount(doc));
+    for (const key of /** @type {const} */ (['x', 'y'])) numberIn(area[key], key, -100_000, 100_000);
+    for (const key of /** @type {const} */ (['width', 'height'])) numberIn(area[key], key, 1, 100_000);
+    return pdf.withPage(doc, area.page - 1, (page) => shownRectToBox(pdf.visibleBox(page), pdf.fn.FPDFPage_GetRotation(page), area));
+  });
+}

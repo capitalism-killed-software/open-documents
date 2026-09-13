@@ -81,7 +81,12 @@ test('a document that takes too long is stopped, and the next one still works', 
 });
 
 test('without python or models, it says how to set them up', async () => {
-  await assert.rejects(createDocling({ python: process.execPath, models: '/nowhere/models' }), { code: 'ENGINE_MISSING', message: /docling-tools models download/ });
+  const noModels = await createDocling({ python: process.execPath, models: '/nowhere/models' });
+  try {
+    await assert.rejects(noModels.convert(new Uint8Array([37, 80, 68, 70, 45]), { to: ['markdown'] }), { code: 'ENGINE_MISSING', message: /docling-tools models download/ });
+  } finally {
+    await noModels.close();
+  }
   const missing = await createDocling({ python: '/nowhere/python3', models: '.' });
   try {
     await assert.rejects(missing.version(), { code: 'ENGINE_MISSING', message: /No Python at/ });

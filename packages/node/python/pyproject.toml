@@ -7,6 +7,7 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
   "docling==2.105.0",
   "openpyxl==3.1.5",
+  "pyhanko==0.37.0",
   "torch==2.12.1",
   "torchvision==0.27.1",
 ]
@@ -23,7 +24,7 @@ packages = ["src/open_documents_worker"]
 
 [tool.uv]
 # Every package must have been published before this date, like the npm packages.
-exclude-newer = "2026-07-10T00:00:00Z"
+exclude-newer = "2026-09-05T00:00:00Z"
 
 # Torch and torchvision from the CPU-only index. The default Linux wheels pull in NVIDIA's CUDA
 # libraries, which are not open source and weigh several gigabytes.

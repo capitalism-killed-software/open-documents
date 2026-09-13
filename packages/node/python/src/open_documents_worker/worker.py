@@ -3,13 +3,16 @@ on stdout. Started once by @open-documents/node and kept warm, because loading t
 seconds and converting a page takes a fraction of one.
 
 Requests:  {"id": 1, "method": "convert", "params": {"path": "...", "to": ["markdown"], "out": "..."}}
-           {"id": 2, "method": "ping"}
+           {"id": 2, "method": "sign", "params": {"path": "...", "certificate": "...", "out": "..."}}
+           {"id": 3, "method": "verify", "params": {"path": "...", "trustRoots": ["..."]}}
+           {"id": 4, "method": "ping"}
 Replies:   {"id": 1, "ok": true, "result": {...}}
            {"id": 1, "ok": false, "error": {"code": "CONVERSION_FAILED", "message": "..."}}
 
 Nothing here reaches the network: models are read from a folder (OPENDOCS_DOCLING_MODELS), and
 the caller turns off Hugging Face downloads. Docling's own OCR is off; scans are read by
-@open-documents/ocr first, and Docling uses the text layer that leaves.
+@open-documents/ocr first, and Docling uses the text layer that leaves. Signing (pyHanko) only
+reaches the network for a timestamp, and only from the authority it is given.
 """
 
 from __future__ import annotations
@@ -128,6 +131,98 @@ def convert(converter: Any, params: dict[str, Any]) -> dict[str, Any]:
     return reply
 
 
+def sign(params: dict[str, Any]) -> dict[str, Any]:
+    """PAdES signature with pyHanko: a new field, visible when a box is given, or an existing
+    empty one. The signature is added as an incremental update, so what was signed stays."""
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import fields, signers
+    from pyhanko.sign.fields import SigFieldSpec
+    from pyhanko.sign.signers.pdf_signer import PdfSignatureMetadata, PdfSigner
+    from pyhanko.stamp import TextStampStyle
+
+    password = params.get("password")
+    try:
+        signer = signers.SimpleSigner.load_pkcs12(pfx_file=params["certificate"], passphrase=password.encode() if password else None)
+    except Exception:
+        signer = None
+    if signer is None:
+        raise Failure("INVALID_INPUT", "The certificate could not be opened: the password is wrong, or it is not a PKCS#12 (.p12, .pfx) file.")
+    out = Path(params["out"]) / "signed.pdf"
+    with open(params["path"], "rb") as source:
+        writer = IncrementalPdfFileWriter(source, strict=False)
+        if writer.prev.encrypted:
+            if not params.get("documentPassword"):
+                raise Failure("PASSWORD_REQUIRED", "This file is encrypted: give its password.")
+            writer.encrypt(params["documentPassword"])
+        existing = {name: value for name, value, _ in fields.enumerate_sig_fields(writer.prev)}
+        name = params.get("field") or next(f"Signature{n}" for n in range(1, 10_000) if f"Signature{n}" not in existing)
+        if existing.get(name) is not None:
+            raise Failure("INVALID_OPTION", f'The field "{name}" is signed already.')
+        box = params.get("box")
+        spec = None if name in existing else SigFieldSpec(sig_field_name=name, on_page=int(params.get("page", 1)) - 1, box=tuple(box) if box else None)
+        meta = PdfSignatureMetadata(
+            field_name=name,
+            reason=params.get("reason"),
+            location=params.get("location"),
+            name=params.get("name"),
+            subfilter=fields.SigSeedSubFilter.PADES,
+            md_algorithm="sha256",
+        )
+        timestamper = None
+        if params.get("timestampUrl"):
+            from pyhanko.sign.timestamps import HTTPTimeStamper
+
+            timestamper = HTTPTimeStamper(params["timestampUrl"])
+        style = TextStampStyle(stamp_text=params.get("text") or "Signed by %(signer)s\n%(ts)s")
+        with open(out, "wb") as target:
+            PdfSigner(meta, signer=signer, timestamper=timestamper, stamp_style=style, new_field_spec=spec).sign_pdf(writer, output=target)
+    return {"path": str(out), "field": name}
+
+
+def verify(params: dict[str, Any]) -> dict[str, Any]:
+    """Every signature in the file: intact, valid, and trusted when it leads to one of the
+    trust roots given. Nothing is fetched: revocation is not checked online."""
+    from asn1crypto import pem, x509
+    from pyhanko.pdf_utils.reader import PdfFileReader
+    from pyhanko.sign.validation import validate_pdf_signature
+    from pyhanko_certvalidator import ValidationContext
+
+    roots = []
+    for path in params.get("trustRoots") or []:
+        data = Path(path).read_bytes()
+        try:
+            if pem.detect(data):
+                roots.extend(x509.Certificate.load(der) for _, _, der in pem.unarmor(data, multiple=True))
+            else:
+                roots.append(x509.Certificate.load(data))
+        except Exception:
+            raise Failure("INVALID_INPUT", "A trust root is not a certificate (PEM or DER).")
+    signatures = []
+    with open(params["path"], "rb") as source:
+        reader = PdfFileReader(source, strict=False)
+        if reader.encrypted:
+            if not params.get("documentPassword"):
+                raise Failure("PASSWORD_REQUIRED", "This file is encrypted: give its password.")
+            reader.decrypt(params["documentPassword"])
+        for sig in reader.embedded_signatures:
+            status = validate_pdf_signature(sig, ValidationContext(trust_roots=roots, allow_fetching=False))
+            cert = status.signing_cert
+            diff = status.diff_result
+            signatures.append({
+                "field": sig.field_name,
+                "signer": (cert.subject.native.get("common_name") or cert.subject.human_friendly) if cert is not None else None,
+                "signedAt": status.signer_reported_dt.isoformat() if status.signer_reported_dt else None,
+                "timestamped": status.timestamp_validity is not None,
+                "intact": bool(status.intact),
+                "valid": bool(status.valid),
+                "trusted": bool(roots) and status.trust_problem_indic is None,
+                "coverage": status.coverage.name if status.coverage is not None else None,
+                "changesAfter": getattr(getattr(diff, "modification_level", None), "name", None),
+                "summary": status.summary(),
+            })
+    return {"signatures": signatures}
+
+
 def serve(requests: TextIO, replies: TextIO, make: Callable[[], Any]) -> None:
     converter = None
     for line in requests:
@@ -146,6 +241,10 @@ def serve(requests: TextIO, replies: TextIO, make: Callable[[], Any]) -> None:
             elif method == "convert":
                 converter = converter or make()
                 result = convert(converter, request.get("params") or {})
+            elif method == "sign":
+                result = sign(request.get("params") or {})
+            elif method == "verify":
+                result = verify(request.get("params") or {})
             else:
                 raise Failure("INVALID_OPTION", f"Unknown method {method!r}.")
             write(replies, {"id": ident, "ok": True, "result": result})

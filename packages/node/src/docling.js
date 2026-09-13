@@ -36,6 +36,35 @@ const STDERR_KEEP = 4000;
  * @property {Uint8Array | null} [xlsx]  null when there are no tables
  */
 
+/**
+ * @typedef {object} SignOptions
+ * @property {Uint8Array} certificate  a PKCS#12 file (.p12, .pfx) with the key and certificate
+ * @property {string} [password]       for the certificate file
+ * @property {string} [field]          the signature field: an empty one already in the file, or a new one's name
+ * @property {number} [page]           where a new field goes, from 1
+ * @property {string} [reason]
+ * @property {string} [location]
+ * @property {string} [name]           the signer's name as written in the signature
+ * @property {string} [text]           what a visible signature shows; default "Signed by %(signer)s" and the time
+ * @property {string} [documentPassword]
+ * @property {string} [timestampUrl]   a time-stamping authority (RFC 3161), for a trusted signing time
+ * @property {number} [timeout]
+ */
+
+/**
+ * @typedef {object} SignatureCheck
+ * @property {string} field
+ * @property {string | null} signer      the certificate's common name
+ * @property {string | null} signedAt   the time the signer's computer gave, ISO 8601
+ * @property {boolean} timestamped      a time-stamping authority vouches for the time
+ * @property {boolean} intact           the signed bytes are unchanged
+ * @property {boolean} valid            the signature is good cryptographically
+ * @property {boolean} trusted          the certificate leads to one of the trust roots given
+ * @property {string | null} coverage   ENTIRE_FILE, ENTIRE_REVISION (changed after signing) or CONTENTS_ONLY
+ * @property {string | null} changesAfter  what changed after signing, as pyHanko rates it
+ * @property {string} summary
+ */
+
 /** @param {DoclingOptions} [options] */
 export function findPython(options = {}) {
   const given = options.python ?? process.env.OPENDOCS_PYTHON;
@@ -58,8 +87,7 @@ const SETUP = (/** @type {string} */ models) =>
 export async function createDocling(options = {}) {
   const python = findPython(options);
   const models = doclingModels(options);
-  if (!python) throw new OpenDocumentsError('ENGINE_MISSING', `Docling is not set up. Run: ${SETUP(models)}`);
-  if (!existsSync(models)) throw new OpenDocumentsError('ENGINE_MISSING', `No Docling models in ${models}. Run: ${SETUP(models)}`);
+  if (!python) throw new OpenDocumentsError('ENGINE_MISSING', `The Python worker is not set up. Run: ${SETUP(models)}`);
   const timeout = options.timeout ?? 300_000;
   const maxJobs = options.maxJobs ?? 50;
   const workDir = options.workDir ?? process.env.OPENDOCS_WORK_DIR ?? tmpdir();
@@ -198,6 +226,8 @@ export async function createDocling(options = {}) {
      * @returns {Promise<StructureResult>}
      */
     async convert(pdf, opts) {
+      // signing needs no models, so they are looked for only here
+      if (!existsSync(models)) throw new OpenDocumentsError('ENGINE_MISSING', `No Docling models in ${models}. Run: ${SETUP(models)}`);
       let bytes = pdf;
       // Docling reads neither encrypted files nor page lists: hand it a plain copy of the pages
       if (opts.pages !== undefined || opts.password !== undefined || (await inspect(pdf)).encrypted) {
@@ -211,6 +241,61 @@ export async function createDocling(options = {}) {
         if (opts.to.includes('xlsx')) result.xlsx = result.xlsx ? new Uint8Array(await readFile(result.xlsx)) : null;
         delete result.tableSheets;
         return result;
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+
+    /**
+     * Sign with pyHanko (PAdES). `box` is in the page's own coordinates; leave it out for an
+     * invisible signature, or name an empty field that is there already.
+     *
+     * @param {Uint8Array} pdf
+     * @param {SignOptions & { box?: [number, number, number, number] }} opts
+     * @returns {Promise<Uint8Array>}
+     */
+    async sign(pdf, opts) {
+      const dir = await mkdtemp(join(home, 'job-'));
+      try {
+        await writeFile(join(dir, 'input.pdf'), pdf);
+        await writeFile(join(dir, 'identity.p12'), opts.certificate);
+        const result = /** @type {any} */ (await request('sign', {
+          path: join(dir, 'input.pdf'),
+          certificate: join(dir, 'identity.p12'),
+          password: opts.password,
+          out: dir,
+          field: opts.field,
+          page: opts.page,
+          box: opts.box,
+          reason: opts.reason,
+          location: opts.location,
+          name: opts.name,
+          text: opts.text,
+          documentPassword: opts.documentPassword,
+          timestampUrl: opts.timestampUrl,
+        }, opts.timeout ?? 120_000));
+        return new Uint8Array(await readFile(result.path));
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+
+    /**
+     * @param {Uint8Array} pdf
+     * @param {{ trustRoots?: Uint8Array[], documentPassword?: string, timeout?: number }} [opts]
+     * @returns {Promise<SignatureCheck[]>}
+     */
+    async verify(pdf, opts = {}) {
+      const dir = await mkdtemp(join(home, 'job-'));
+      try {
+        await writeFile(join(dir, 'input.pdf'), pdf);
+        const roots = await Promise.all((opts.trustRoots ?? []).map(async (cert, i) => {
+          const path = join(dir, `root-${i}.crt`);
+          await writeFile(path, cert);
+          return path;
+        }));
+        const result = /** @type {any} */ (await request('verify', { path: join(dir, 'input.pdf'), trustRoots: roots, documentPassword: opts.documentPassword }, opts.timeout ?? 120_000));
+        return result.signatures;
       } finally {
         await rm(dir, { recursive: true, force: true });
       }

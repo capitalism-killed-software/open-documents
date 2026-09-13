@@ -1,6 +1,6 @@
 // One entry point for "make this a PDF": works out what the file is and sends it to the right
 // converter. LibreOffice and Chromium start the first time they are needed.
-import { imagesToPdf, toPdfA, OpenDocumentsError } from '@open-documents/core';
+import { imagesToPdf, toPdfA, areaToPageBox, OpenDocumentsError } from '@open-documents/core';
 import { sniff } from './sniff.js';
 import { createLibreOffice, OFFICE_KINDS } from './libreoffice.js';
 import { createChromium } from './chromium.js';
@@ -179,6 +179,33 @@ const plain = async (bytes, kind, opts) => {
       const result = await read(input, opts, 'xlsx');
       if (!result.xlsx) throw new OpenDocumentsError('CONVERSION_FAILED', 'No tables were found in the document.');
       return result.xlsx;
+    },
+    /**
+     * Sign a PDF (PAdES, with pyHanko in the Python worker). For a visible signature give
+     * `page`, `x`, `y`, `width` and `height` in points as shown; or `field`, the name of an empty
+     * signature field already in the file; or neither, for an invisible one.
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {import('./docling.js').SignOptions & { x?: number, y?: number, width?: number, height?: number }} opts
+     */
+    async sign(input, opts) {
+      if (!(opts?.certificate instanceof Uint8Array)) throw new OpenDocumentsError('INVALID_OPTION', 'certificate must be the bytes of a PKCS#12 (.p12, .pfx) file.');
+      const bytes = await toBytes(input);
+      const visible = opts.x !== undefined || opts.y !== undefined || opts.width !== undefined || opts.height !== undefined;
+      const box = visible
+        ? await areaToPageBox(bytes, { page: opts.page ?? 1, x: /** @type {number} */ (opts.x), y: /** @type {number} */ (opts.y), width: /** @type {number} */ (opts.width), height: /** @type {number} */ (opts.height) }, { password: opts.documentPassword })
+        : undefined;
+      return (await docling()).sign(bytes, { ...opts, page: opts.page ?? 1, box });
+    },
+    /**
+     * Check every signature in a PDF. `trustRoots` are the certificates (PEM or DER) of the
+     * authorities to trust; without them no signature counts as trusted. Nothing is fetched.
+     *
+     * @param {Uint8Array | ArrayBuffer | Blob} input
+     * @param {{ trustRoots?: Uint8Array[], documentPassword?: string, timeout?: number }} [opts]
+     */
+    async verifySignatures(input, opts = {}) {
+      return (await docling()).verify(await toBytes(input), opts);
     },
     async close() {
       const lo = await office?.catch(() => null);

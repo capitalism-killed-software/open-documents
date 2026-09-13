@@ -19,6 +19,7 @@ export { getFormFields, fillForm, addFormFields, flatten } from './forms.js';
 export { compareText, compareVisual, compareReport } from './compare.js';
 export { checkPdfA, toPdfA } from './pdfa.js';
 export { redact, verifyRedaction } from './redact.js';
+export { areaToPageBox } from './geometry.js';
 export { setMetadata } from './edit/metadata.js';
 export { getBookmarks, setBookmarks } from './edit/bookmarks.js';
 export { encrypt, decrypt } from './security.js';
