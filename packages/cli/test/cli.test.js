@@ -398,3 +398,21 @@ test('redact takes words, patterns and areas out, and says it checked', async ()
   assert.equal((await run(['redact', file, '--area', '1,2,3', '-o', join(dir, 'x.pdf')])).code, 1);
   assert.equal((await run(['redact', file, '--pattern', '(', '-o', join(dir, 'y.pdf')])).code, 1);
 });
+
+test('sign and verify-signatures', { skip: (await import('@open-documents/node')).findPython() ? false : 'The Python worker is not set up' }, async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { findPython } = await import('@open-documents/node');
+  const ids = join(dir, 'ids');
+  await (await import('node:fs/promises')).mkdir(ids);
+  await promisify(execFile)(/** @type {string} */ (findPython()), [fileURLToPath(new URL('../../node/test/make-identity.py', import.meta.url)), ids]);
+  const signed = join(dir, 'signed.pdf');
+  const done = await run(['sign', pdf, '--certificate', join(ids, 'signer.p12'), '--certificate-password', 'secret', '--area', '1,72,600,200,50', '--reason', 'Approved', '-o', signed]);
+  assert.equal(done.code, 0, done.err);
+  const trusted = await run(['verify-signatures', signed, '--trust', join(ids, 'ca.pem')]);
+  assert.match(trusted.out, /^Signature1: signed by Sam Signer on .+, valid and trusted$/m);
+  const untrusted = await run(['verify-signatures', signed]);
+  assert.match(untrusted.out, /valid, but not from a trusted authority/);
+  assert.equal((await run(['verify-signatures', pdf])).out, 'No signatures.\n');
+  assert.equal((await run(['sign', pdf, '-o', join(dir, 'no-cert.pdf')])).code, 1);
+});

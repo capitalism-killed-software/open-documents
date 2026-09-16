@@ -1,4 +1,5 @@
 // Server settings from the environment, checked before anything starts.
+import { readFileSync } from 'node:fs';
 
 /**
  * @typedef {object} Config
@@ -34,6 +35,8 @@ export function configFromEnv(env) {
       ocrLanguages,
       ocrWorkers,
       ocrLangPath: env.OPENDOCS_OCR_LANG_PATH || undefined,
+      timestampUrl: env.OPENDOCS_TIMESTAMP_URL || undefined,
+      trustRoots: env.OPENDOCS_TRUST_ROOTS ? [readFileSync(env.OPENDOCS_TRUST_ROOTS)] : undefined,
       apiKeys,
       maxFileSize: Math.round(mb * 1024 * 1024),
       allowUrl: env.OPENDOCS_ALLOW_URL === '1',

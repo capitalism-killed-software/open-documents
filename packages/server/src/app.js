@@ -41,6 +41,8 @@ const STATUS = {
  * @property {number} [ocrWorkers]      pages read at once; default 2
  * @property {string} [ocrLangPath]     folder of <code>.traineddata.gz files, instead of the npm packages
  * @property {any} [ocr]  from createOcr() in @open-documents/ocr; started on first use if left out
+ * @property {string} [timestampUrl]  a time-stamping authority (RFC 3161) for signatures
+ * @property {Uint8Array[]} [trustRoots]  certificates every signature check trusts, besides those sent
  * @property {boolean | object} [logger]
  */
 
@@ -172,7 +174,7 @@ export async function buildServer(options = {}) {
     const { files, options: { webhook, ...opts } } = await readForm(req);
     if (!files.length) throw new OpenDocumentsError('INVALID_INPUT', 'Upload the file as multipart form data.');
     if (op.files === 'one' && files.length > 1) throw new OpenDocumentsError('INVALID_INPUT', `${name} takes one file.`);
-    return respond(req, reply, () => op.run(files.map((f) => f.data), opts, { converter, ocr }), webhook);
+    return respond(req, reply, () => op.run(files.map((f) => f.data), opts, { converter, ocr, timestampUrl: options.timestampUrl, trustRoots: options.trustRoots }), webhook);
   });
 
   app.post('/v1/convert', async (req, reply) => {

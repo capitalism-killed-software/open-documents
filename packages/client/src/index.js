@@ -146,6 +146,11 @@ export function createClient(options) {
     /** @param {Input} input @param {object[]} fields */
     addFormFields: (input, fields, opts = {}) => run('add-form-fields', input, { ...opts, fields }),
     flatten: one('flatten'),
+    // signatures (pyHanko on the server)
+    /** @param {Input} input @param {Input} certificate  a PKCS#12 file */
+    sign: (input, certificate, opts = {}) => run('sign', [input, certificate], opts),
+    /** @param {Input} input @param {{ trustRoots?: Input[], documentPassword?: string }} [opts] */
+    verifySignatures: (input, { trustRoots = [], ...opts } = {}) => run('verify-signatures', [input, ...trustRoots], opts),
     // redaction (the server takes words, not patterns)
     redact: one('redact'),
     verifyRedaction: one('verify-redaction'),

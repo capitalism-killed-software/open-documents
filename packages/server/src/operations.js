@@ -5,7 +5,7 @@ import { zipSync } from 'fflate';
 
 /**
  * @typedef {{ type: string, body: Uint8Array | string | object, filename?: string }} Reply
- * @typedef {{ converter: any, ocr: (options: Record<string, any>) => Promise<any> }} Context
+ * @typedef {{ converter: any, ocr: (options: Record<string, any>) => Promise<any>, timestampUrl?: string, trustRoots?: Uint8Array[] }} Context
  *   converter: from createConverter() in @open-documents/node; ocr: the server's OCR engine from
  *   createOcr() in @open-documents/ocr, started on first use
  * @typedef {{ files: 'one' | 'many', run: (files: Uint8Array[], options: Record<string, any>, ctx: Context) => Promise<Reply> }} Operation
@@ -85,6 +85,20 @@ export const OPERATIONS = {
   'fill-form': { files: 'one', run: async ([f], o) => pdf(await od.fillForm(f, o.values, o)) },
   'add-form-fields': { files: 'one', run: async ([f], o) => pdf(await od.addFormFields(f, o.fields, o)) },
   flatten: { files: 'one', run: async ([f], o) => pdf(await od.flatten(f, o)) },
+
+  // signatures: the PDF, then the PKCS#12 file; a timestamp only from the server's own authority
+  sign: {
+    files: 'many',
+    run: async (files, o, ctx) => {
+      if (files.length !== 2) throw new od.OpenDocumentsError('INVALID_INPUT', 'sign takes two files: the PDF, then the PKCS#12 (.p12, .pfx) certificate.');
+      const { timestampUrl: _t, certificate: _c, ...rest } = o;
+      return pdf(await ctx.converter.sign(files[0], { ...rest, certificate: files[1], timestampUrl: ctx.timestampUrl }));
+    },
+  },
+  'verify-signatures': {
+    files: 'many',
+    run: async ([f, ...roots], o, ctx) => json(await ctx.converter.verifySignatures(f, { trustRoots: [...(ctx.trustRoots ?? []), ...roots], documentPassword: o.documentPassword })),
+  },
 
   // redaction: literal words only, never patterns, so a request cannot make the server spin
   redact: { files: 'one', run: async ([f], o) => pdf(await od.redact(f, redactOptions(o))) },

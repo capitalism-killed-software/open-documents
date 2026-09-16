@@ -26,6 +26,11 @@ Look:
   opendocs text <file.pdf> [--pages 1-3,5]
   opendocs render <file.pdf> [--page N | --pages 1-3] [--dpi N | --width PX] [-o out.png]
 
+Sign and check signatures (needs the Python worker, see docs/api.md):
+  opendocs sign <file.pdf> --certificate id.p12 [--certificate-password pw] [--field name]
+                [--area page,x,y,w,h] [--reason ...] [--location ...] [--timestamp-url https://...]
+  opendocs verify-signatures <file.pdf> [--trust ca.pem]...
+
 Redact (takes out for good what is under the boxes, then checks the result):
   opendocs redact <file.pdf> [--find "Sam Sample"]... [--pattern "\\d{4} \\d{4}"]... [--area page,x,y,w,h]...
                   [--ignore-case] [--color #000000] [--metadata]
@@ -155,6 +160,13 @@ const OPTIONS = {
   area: { type: 'string', multiple: true },
   'ignore-case': { type: 'boolean' },
   metadata: { type: 'boolean' },
+  certificate: { type: 'string' },
+  'certificate-password': { type: 'string' },
+  field: { type: 'string' },
+  reason: { type: 'string' },
+  location: { type: 'string' },
+  'timestamp-url': { type: 'string' },
+  trust: { type: 'string', multiple: true },
   part: { type: 'string' },
   check: { type: 'boolean' },
   'password-b': { type: 'string' },
@@ -185,6 +197,8 @@ const COMMANDS = {
   compare: { files: 'many', run: compare },
   pdfa: { files: 'one', run: pdfa },
   redact: { files: 'one', run: redactCommand },
+  sign: { files: 'one', run: signCommand },
+  'verify-signatures': { files: 'one', run: verifySignaturesCommand },
   'verify-redaction': { files: 'one', run: verifyCommand },
   split: { files: 'one', run: split },
   extract: { files: 'one', run: (ctx) => change(ctx, async (bytes, pw) => od.extractPages(bytes, required(ctx, 'pages'), pw)) },
@@ -592,6 +606,39 @@ async function redactCommand(ctx) {
   for (const m of r.matches) io.out(`- ${m.pattern}: ${m.count} on page ${m.page}\n`);
   if (r.rasterised.length) io.out(`Pages ${r.rasterised.join(', ')} did not pass and are now pictures of themselves.\n`);
   printVerification(io, r.verification);
+}
+
+/** @param {Context} ctx */
+async function signCommand(ctx) {
+  const { values } = ctx;
+  const certificate = await readFile(required(ctx, 'certificate'));
+  const [area] = redaction({ ...ctx, values: { area: values.area } }).areas;
+  await withConverter((c) => change(ctx, (bytes, pw) => c.sign(bytes, {
+    certificate,
+    password: values['certificate-password'],
+    documentPassword: pw.password,
+    field: values.field,
+    reason: values.reason,
+    location: values.location,
+    timestampUrl: values['timestamp-url'],
+    ...(area ?? {}),
+  })));
+}
+
+/** @param {Context} ctx */
+async function verifySignaturesCommand({ files, values, io }) {
+  const trustRoots = await Promise.all((values.trust ?? []).map((/** @type {string} */ f) => readFile(f)));
+  const bytes = await readFile(files[0]);
+  const checks = await withConverter((c) => c.verifySignatures(bytes, { trustRoots, documentPassword: values.password }));
+  if (!checks.length) {
+    io.out('No signatures.\n');
+    return;
+  }
+  for (const s of checks) {
+    const state = !s.intact ? 'CHANGED since it was signed' : !s.valid ? 'NOT valid' : s.trusted ? 'valid and trusted' : 'valid, but not from a trusted authority';
+    const after = s.intact && s.coverage !== 'ENTIRE_FILE' ? '; the file was changed after this signature' : '';
+    io.out(`${s.field}: signed by ${s.signer ?? 'someone unknown'}${s.signedAt ? ` on ${s.signedAt}` : ''}, ${state}${after}\n`);
+  }
 }
 
 /** @param {Context} ctx */

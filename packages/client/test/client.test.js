@@ -160,3 +160,22 @@ test('redaction from the client', async () => {
   assert.equal((await extractText(out))[0].text, 'Ring now');
   assert.equal((await client.verifyRedaction(words, { text: ['Sam Sample'] })).ok, false);
 });
+
+test('sign and verify from the client', { skip: (await import('@open-documents/node')).findPython() ? false : 'The Python worker is not set up' }, async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { mkdtemp, readFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { findPython } = await import('@open-documents/node');
+  const ids = await mkdtemp(join(tmpdir(), 'od-ids-'));
+  try {
+    await promisify(execFile)(/** @type {string} */ (findPython()), [fileURLToPath(new URL('../../node/test/make-identity.py', import.meta.url)), ids]);
+    const signed = await client.sign(doc.bytes, await readFile(join(ids, 'signer.p12')), { password: 'secret' });
+    const [check] = await client.verifySignatures(signed, { trustRoots: [await readFile(join(ids, 'ca.pem'))] });
+    assert.deepEqual([check.valid, check.trusted], [true, true]);
+  } finally {
+    await rm(ids, { recursive: true, force: true });
+  }
+});

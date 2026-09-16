@@ -50,3 +50,18 @@ test('ocr settings: languages, workers and a language folder', () => {
   assert.deepEqual([c.server.ocrLanguages, c.server.ocrWorkers, c.server.ocrLangPath], [['eng', 'deu', 'fra'], 4, '/tessdata']);
   assert.throws(() => configFromEnv({ OPENDOCS_OCR_WORKERS: '0' }), /OPENDOCS_OCR_WORKERS/);
 });
+
+test('signature settings: a timestamp authority and trust roots', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const folder = await mkdtemp(join(tmpdir(), 'od-roots-'));
+  try {
+    await writeFile(join(folder, 'roots.pem'), '-----BEGIN CERTIFICATE-----\n');
+    const c = configFromEnv({ OPENDOCS_TIMESTAMP_URL: 'https://tsa.example/', OPENDOCS_TRUST_ROOTS: join(folder, 'roots.pem') });
+    assert.equal(c.server.timestampUrl, 'https://tsa.example/');
+    assert.equal(c.server.trustRoots?.length, 1);
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});

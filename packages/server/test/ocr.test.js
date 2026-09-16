@@ -153,3 +153,27 @@ test('redaction over http takes words, not patterns', async () => {
   const regex = await post('redact', [doc], { text: [{ source: '.*' }] });
   assert.deepEqual([regex.statusCode, regex.json().error.code], [400, 'INVALID_OPTION']);
 });
+
+test('sign and verify over http', { skip: (await import('@open-documents/node')).findPython() ? false : 'The Python worker is not set up' }, async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { mkdtemp, readFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { findPython } = await import('@open-documents/node');
+  const ids = await mkdtemp(join(tmpdir(), 'od-ids-'));
+  try {
+    await promisify(execFile)(/** @type {string} */ (findPython()), [fileURLToPath(new URL('../../node/test/make-identity.py', import.meta.url)), ids]);
+    const p12 = await readFile(join(ids, 'signer.p12'));
+    const ca = await readFile(join(ids, 'ca.pem'));
+    const signed = await post('sign', [doc.bytes, p12], { password: 'secret', timestampUrl: 'http://169.254.169.254/' });
+    assert.equal(signed.statusCode, 200, signed.body);
+    const checks = await post('verify-signatures', [new Uint8Array(signed.rawPayload), ca]);
+    assert.deepEqual(checks.json().map((/** @type {any} */ c) => [c.signer, c.valid, c.trusted]), [['Sam Signer', true, true]]);
+    const one = await post('sign', [doc.bytes]);
+    assert.deepEqual([one.statusCode, one.json().error.code], [400, 'INVALID_INPUT']);
+  } finally {
+    await rm(ids, { recursive: true, force: true });
+  }
+});
