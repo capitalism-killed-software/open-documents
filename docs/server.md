@@ -46,6 +46,8 @@ npx opendocs-server           # listens on 127.0.0.1:3000
 | `OPENDOCS_OCR_WORKERS` | `2` | Pages read at the same time. Each takes about 100 MB. |
 | `OPENDOCS_OCR_LANG_PATH` | the npm packages | A folder holding `<code>.traineddata.gz` files. |
 | `OPENDOCS_PYTHON`, `OPENDOCS_DOCLING_MODELS` | set in the full image | A Python with Docling and its model folder, for the structure operations. |
+| `OPENDOCS_TIMESTAMP_URL` | none | A time-stamping authority (RFC 3161) for signatures. |
+| `OPENDOCS_TRUST_ROOTS` | none | A PEM file of certificates every signature check trusts, besides those sent with a request. |
 | `OPENDOCS_WORK_DIR` | the system temp folder | Where LibreOffice profiles and job files go. |
 | `OPENDOCS_LOG` | `info` | Log level, or `0` for none. |
 
@@ -68,6 +70,8 @@ curl -H "Authorization: Bearer $KEY" -F file=@contract.pdf -F 'options={"angle":
 | `merge` (several files; `items` in options gives each one `pages` or `password`), `extract-pages`, `remove-pages`, `reorder`, `rotate`, `slice`, `crop`, `n-up`, `insert-blank-pages` | PDF |
 | `split` | a zip of PDFs |
 | `add-text`, `watermark`, `page-numbers`, `header-footer`, `bates`, `metadata`, `set-bookmarks` | PDF |
+| `sign` (two files: the PDF, then a PKCS#12 certificate; `password`, `page`, `x`, `y`, `width`, `height`, `field`, `reason`, `location`, `name`) | PDF, signed. A timestamp comes only from `OPENDOCS_TIMESTAMP_URL`, never from a request |
+| `verify-signatures` (the PDF, then any certificates to trust) | JSON: each signature's signer, time, and whether it is intact, valid and trusted |
 | `redact` (`areas`, `text`, `ignoreCase`, `pages`, `color`, `metadata`) | PDF, redacted and checked. `text` takes words only: patterns would let a request make the server spin |
 | `verify-redaction` (`areas`, `text`, `color`) | JSON: `{ ok, problems }` |
 | `check-pdfa` (`part`) | JSON: what the file claims and the common PDF/A problems found |

@@ -34,6 +34,8 @@ const png = await renderPage(locked, { page: 1, dpi: 144, password: 'open' });
 - **Edit:** text, watermarks, page numbers, headers and footers, Bates numbers, letterheads
   and backgrounds from another PDF (over or under the page), metadata, bookmarks
 - **Forms:** read every field, fill them by name, add new ones, flatten
+- **Signatures:** sign (PAdES, visible or not, into new or prepared fields, with an optional
+  trusted timestamp) and check every signature in a file (pyHanko, in the Python worker)
 - **Redaction:** areas, words and patterns taken out of the file for good (text, image pixels,
   drawings, form fields, metadata), then checked, with pictures of pages as the fallback
 - **PDF/A:** make it from office files, web pages and images, fix up existing PDFs, and check
@@ -111,8 +113,8 @@ document in view with the library and shows the result.
 - **Edit:** images, links, existing text
 - **To PDF:** EPUB
 - **From PDF:** Word with flowing text
-- **More:** annotations from code, full PDF/A validation (veraPDF),
-  digital signatures, fonts beyond Latin
+- **More:** annotations from code, full PDF/A validation (veraPDF), long-term signature
+  validation (PAdES B-LT), fonts beyond Latin
 - **Viewer:** signing, redaction
 
 ## Develop

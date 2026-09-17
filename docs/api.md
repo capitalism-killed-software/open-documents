@@ -83,8 +83,21 @@ way it looks stay in step, and the file keeps its encryption.
 |---|---|
 | `getFormFields(pdf, { password })` | Every field: `{ name, type, value, options, readOnly, required, multiline, widgets }`. `type` is `text`, `checkbox`, `radio`, `dropdown`, `list`, `signature` or `button`. `value` is the text, `true`/`false` for a check box, the chosen export value for a radio group (or `null`), the chosen options for a list. `widgets` says where the field appears: `{ page, x, y, width, height }` in points as shown, plus `exportValue` for check boxes and radio buttons. |
 | `fillForm(pdf, values, { flatten, password })` | Fill by name: `{ name: 'Sam', agree: true, colour: 'blue' }`. Every name and value is checked before anything changes. Read-only fields can be filled from code. `flatten: true` then makes the values part of the pages. |
-| `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`. Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
+| `addFormFields(pdf, fields, { password })` | New fields: `{ type, name, page, x, y, width, height, value, options, required, readOnly, multiline, multiple, fontSize }`, with `type` one of `text`, `checkbox`, `dropdown`, `list`, or `signature` (an empty field to sign into later; files without encryption only). Names must be new and have no dots. On a turned page the field is placed where it is asked for as shown; its text runs the way the page's own content does. |
 | `flatten(pdf, { pages, password })` | Fields and annotations become part of the pages: they look the same and can no longer be changed. When no field is left, the form itself is removed. |
+
+## Signatures (Node)
+
+PAdES signatures with pyHanko (MIT), in the same Python worker as Docling (set it up as below;
+Docling's models are not needed for signing).
+
+| Method | What it does |
+|---|---|
+| `converter.sign(pdf, { certificate, password, page, x, y, width, height, field, reason, location, name, text, timestampUrl, documentPassword })` | Sign with a PKCS#12 file (`certificate`, its `password`). A visible signature goes where `page`, `x`, `y`, `width`, `height` say (points as shown); `field` names an empty signature field already in the file (see `addFormFields`); with neither, the signature is invisible. `timestampUrl` asks a time-stamping authority (RFC 3161) for a trusted time. The signature is added as an incremental update, so earlier signatures stay valid. |
+| `converter.verifySignatures(pdf, { trustRoots, documentPassword })` | Each signature: `{ field, signer, signedAt, timestamped, intact, valid, trusted, coverage, changesAfter, summary }`. `trusted` means the certificate leads to one of `trustRoots` (certificates, PEM or DER); without them nothing counts as trusted. `coverage` is `ENTIRE_FILE`, or `ENTIRE_REVISION` when the file changed after this signature. Nothing is fetched: revocation is not checked online. |
+
+Changing a signed file with any function in core rewrites it and breaks its signatures: sign
+last. `addFormFields` makes empty `signature` fields to sign into later.
 
 ## Redaction
 

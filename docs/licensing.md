@@ -64,6 +64,8 @@ checked against the same policy by `tools/check-python-licences.py` (in CI, and 
   certificate authorities) and tqdm (progress bars). MPL-2.0 applies file by file and only asks
   that changes to those files be shared; we change neither, and they run in the worker's own
   process, never in yours.
+- pyHanko (MIT) signs and checks signatures, with pyhanko-certvalidator (MIT), cryptography
+  (Apache-2.0 or BSD-3-Clause), asn1crypto (MIT) and aiohttp (Apache-2.0).
 - Docling's models: the layout model is Apache-2.0, the table model CDLA-Permissive-2.0, which
   allows use and redistribution in commercial products.
 
