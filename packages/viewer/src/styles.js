@@ -54,6 +54,12 @@ export const STYLES = `
 .draft-buttons button { font: inherit; height: 28px; padding: 0 10px; border: 1px solid var(--od-line); border-radius: 5px; background: var(--od-bar); cursor: pointer; }
 .draft-buttons button[type="submit"] { background: var(--od-accent); border-color: var(--od-accent); color: #fff; }
 .draft-error { margin: 0; color: #b3261e; font-size: 12px; }
+/* redaction marks: red dashed boxes waiting to be applied */
+.mark-layer { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+.mark-layer.marking { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.mark { position: absolute; border: 1.5px dashed #b3261e; background: rgba(179, 38, 30, 0.15); }
+.mark.drawing { pointer-events: none; }
+.mark button { position: absolute; top: -10px; right: -10px; width: 20px; height: 20px; padding: 0; border: 1px solid #b3261e; border-radius: 50%; background: #fff; color: #b3261e; font: 12px/1 sans-serif; cursor: pointer; pointer-events: auto; }
 .message { margin: auto; padding: 24px; color: var(--od-muted); text-align: center; }
 .message.error { color: #b3261e; }
 `;

@@ -474,3 +474,57 @@ test('addFormFields from code', { skip }, async () => {
     await page.close();
   }
 });
+
+test('redact: mark an area, apply, and what was there is gone for good', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('redact', 'true'));
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    await inViewer(page, 'button[data-redact="mark"]').click();
+    const zoom = await page.evaluate(() => {
+      const el = /** @type {HTMLElement} */ (document.getElementById('v')?.shadowRoot?.querySelector('.page[data-page="1"]'));
+      return el.getBoundingClientRect().width / 612;
+    });
+    const at = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    // the first line of page 1 starts at 72 points across, its baseline 72 points down
+    await page.mouse.move(at.x + 60 * zoom, at.y + 58 * zoom);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 200 * zoom, at.y + 76 * zoom, { steps: 5 });
+    await page.mouse.up();
+    assert.equal(await inViewer(page, '.mark').count(), 1);
+    assert.match(await inViewer(page, 'button[data-redact="apply"]').innerText(), /Redact 1 area/);
+    await inViewer(page, 'button[data-redact="apply"]').click();
+    await page.waitForFunction((list) => list.some((c) => c.type === 'redaction'), changes);
+    const change = await page.evaluate((list) => list.find((c) => c.type === 'redaction'), changes);
+    assert.deepEqual([change.pages, change.report.verification.ok], [[1], true]);
+    await inViewer(page, '[part="redaction-toolbar"] [role="status"]').filter({ hasText: 'Redacted and checked.' }).waitFor();
+    const saved = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const { extractText } = await import('@open-documents/core');
+    const [first] = await extractText(new Uint8Array(saved), { pages: [1] });
+    assert.doesNotMatch(first.text.split('\n')[0], /line 1\b/, 'the first line is gone');
+    assert.match(first.text, /Page 1 line 2/, 'the next line stays');
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('redact from code, and a signature field from the designer tools', { skip }, async () => {
+  const { page } = await open();
+  try {
+    const report = await page.evaluate(async () => /** @type {any} */ (document.getElementById('v')).redact({ text: ['Page 3 line 5'] }));
+    assert.deepEqual(report.matches, [{ pattern: 'Page 3 line 5', page: 3, count: 1 }]);
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('design', 'true'));
+    assert.equal(await inViewer(page, 'button[data-field-tool="signature"]').innerText(), 'Signature');
+    await page.evaluate(async () => /** @type {any} */ (document.getElementById('v')).addFormFields([{ type: 'signature', name: 'approver', page: 1, x: 72, y: 600, width: 200, height: 50 }]));
+    const saved = await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save()));
+    const { getFormFields } = await import('@open-documents/core');
+    assert.deepEqual((await getFormFields(new Uint8Array(saved))).map((f) => [f.name, f.type]), [['approver', 'signature']]);
+  } finally {
+    await page.close();
+  }
+});

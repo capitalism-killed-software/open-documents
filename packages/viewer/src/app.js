@@ -47,6 +47,7 @@ const html = htm.bind(h);
  * @property {(event: string, detail: object) => void} emit
  * @property {{ rotate: (page: number, angle: number) => Promise<any>, remove: (page: number) => Promise<any>, move: (from: number, to: number) => Promise<any> }} [organize]
  * @property {{ add: (field: any) => Promise<any>, names: () => string[] }} [design]
+ * @property {{ apply: (areas: any[]) => Promise<any>, message?: string, listeners?: Set<(text: string) => void> }} [redaction]
  */
 
 /** The kinds of field the designer draws: tool id, label, and the start of new names. */
@@ -55,6 +56,7 @@ export const FIELD_TOOLS = [
   ['checkbox', 'Check box', 'check'],
   ['dropdown', 'Dropdown', 'choice'],
   ['list', 'List', 'list'],
+  ['signature', 'Signature', 'signature'],
 ];
 
 /** The annotation tools offered, in toolbar order: EmbedPDF tool id and label. */
@@ -71,7 +73,7 @@ export const TOOLS = [
 /**
  * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, author: string, controller: Controller, pending: { current: any } }} props
  */
-export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, design, author, controller, pending }) {
+export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, design, redact, author, controller, pending }) {
   // the engine restarts whenever its settings change, so keep the font settings the same object
   const fontFallback = useMemo(() => fontConfig(fontsUrl), [fontsUrl]);
   const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl, worker: true, fontFallback });
@@ -117,15 +119,21 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, d
       if (pending.current) controller.open?.(pending.current);
     }}
   >
-    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar || organize} annotate=${annotate} organize=${organize} design=${design} controller=${controller} />`}
+    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar || organize} annotate=${annotate} organize=${organize} design=${design} redact=${redact} controller=${controller} />`}
   </${EmbedPDF}>`;
 }
 
 /**
  * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, controller: Controller }} props
  */
-function Shell({ documentId, toolbar, sidebar, annotate, organize, design, controller }) {
+function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redact, controller }) {
   const [showSidebar, setShowSidebar] = useState(sidebar);
+  // areas marked for redaction, in points as shown, not yet applied
+  const [marks, setMarks] = useState(/** @type {{ page: number, x: number, y: number, width: number, height: number }[]} */ ([]));
+  const [marking, setMarking] = useState(false);
+  useEffect(() => {
+    if (!redact) setMarking(false);
+  }, [redact]);
   /** @type {[string | null, (tool: string | null) => void]} */
   const [fieldTool, setFieldTool] = useState(/** @type {string | null} */ (null));
   useEffect(() => {
@@ -143,11 +151,17 @@ function Shell({ documentId, toolbar, sidebar, annotate, organize, design, contr
       return html`<div class="frame">
         ${toolbar && html`<${Toolbar} documentId=${documentId} showSidebar=${showSidebar} onToggleSidebar=${() => setShowSidebar((s) => !s)} />`}
         ${toolbar && annotate && html`<${AnnotationTools} documentId=${documentId} />`}
-        ${toolbar && design && html`<${FieldTools} active=${fieldTool} onPick=${setFieldTool} />`}
+        ${toolbar && design && html`<${FieldTools} active=${fieldTool} onPick=${(/** @type {string | null} */ t) => { setFieldTool(t); if (t) setMarking(false); }} />`}
+        ${toolbar && redact && html`<${RedactTools} marking=${marking} marks=${marks} controller=${controller}
+          onMark=${(/** @type {boolean} */ on) => { setMarking(on); if (on) setFieldTool(null); }}
+          onClear=${() => setMarks([])} />`}
         <${Changes} documentId=${documentId} controller=${controller} />
         <div class="body">
           ${showSidebar && html`<${Sidebar} documentId=${documentId} organize=${organize} controller=${controller} />`}
-          <${Pages} documentId=${documentId} controller=${controller} fieldTool=${design ? fieldTool : null} />
+          <${Pages} documentId=${documentId} controller=${controller} fieldTool=${design ? fieldTool : null}
+            marks=${redact ? marks : null} marking=${redact && marking}
+            onMarked=${(/** @type {any} */ m) => setMarks((list) => [...list, m])}
+            onUnmark=${(/** @type {any} */ m) => setMarks((list) => list.filter((x) => x !== m))} />
         </div>
       </div>`;
     }}
@@ -427,8 +441,104 @@ function DesignLayer({ documentId, tool, pageIndex, controller }) {
 /** @param {number} n */
 const round = (n) => Math.round(n * 100) / 100;
 
-/** @param {{ documentId: string, controller: Controller, fieldTool?: string | null }} props */
-function Pages({ documentId, controller, fieldTool = null }) {
+/**
+ * @param {{ marking: boolean, marks: any[], controller: Controller, onMark: (on: boolean) => void, onClear: () => void }} props
+ */
+function RedactTools({ marking, marks, controller, onMark, onClear }) {
+  const [busy, setBusy] = useState(false);
+  // the document is opened again while redacting, which builds this bar anew before the work is
+  // done: the message lives on the controller, and whichever bar is showing hears about it
+  const [message, setShown] = useState(controller.redaction?.message ?? '');
+  useEffect(() => {
+    const redaction = controller.redaction;
+    if (!redaction) return undefined;
+    const hear = (/** @type {string} */ text) => setShown(text);
+    (redaction.listeners ??= new Set()).add(hear);
+    return () => redaction.listeners?.delete(hear);
+  }, [controller]);
+  const setMessage = (/** @type {string} */ text) => {
+    const redaction = controller.redaction;
+    if (!redaction) return setShown(text);
+    redaction.message = text;
+    for (const hear of redaction.listeners ?? []) hear(text);
+  };
+  const apply = async () => {
+    setBusy(true);
+    setMessage('');
+    try {
+      const report = await controller.redaction?.apply(marks);
+      onClear();
+      onMark(false);
+      setMessage(report?.verification?.ok ? 'Redacted and checked.' : 'Redacted; the check found something: see the od-change event.');
+    } catch (err) {
+      setMessage(String(/** @type {Error} */ (err)?.message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return html`<div class="bar tools" part="redaction-toolbar" role="toolbar" aria-label="Redact">
+    <button data-redact="mark" aria-pressed=${String(marking)} onClick=${() => { setMessage(''); onMark(!marking); }}>Mark for redaction</button>
+    <button data-redact="apply" disabled=${!marks.length || busy} onClick=${apply}>${marks.length ? `Redact ${marks.length} area${marks.length === 1 ? '' : 's'}` : 'Redact'}</button>
+    <button data-redact="clear" disabled=${!marks.length || busy} onClick=${onClear}>Clear marks</button>
+    <span class="grow"></span>
+    <span class="muted" role="status">${busy ? 'Redacting…' : message || (marking ? 'Drag over what to take out' : '')}</span>
+  </div>`;
+}
+
+/**
+ * Areas marked for redaction on one page, and, while marking, a layer to drag new ones.
+ *
+ * @param {{ documentId: string, pageIndex: number, marks: any[], marking: boolean, onMarked: (m: any) => void, onUnmark: (m: any) => void }} props
+ */
+function MarkLayer({ documentId, pageIndex, marks, marking, onMarked, onUnmark }) {
+  const scale = useZoom(documentId).state?.currentZoomLevel ?? 1;
+  const [box, setBox] = useState(/** @type {{ x: number, y: number, w: number, h: number } | null} */ (null));
+  const start = useRef(/** @type {{ x: number, y: number } | null} */ (null));
+  const where = (/** @type {PointerEvent} */ e) => {
+    const r = /** @type {HTMLElement} */ (e.currentTarget).getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const handlers = marking ? {
+    onPointerDown: (/** @type {PointerEvent} */ e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      /** @type {HTMLElement} */ (e.currentTarget).setPointerCapture(e.pointerId);
+      start.current = where(e);
+      setBox({ ...start.current, w: 0, h: 0 });
+    },
+    onPointerMove: (/** @type {PointerEvent} */ e) => {
+      if (!start.current) return;
+      e.stopPropagation();
+      const p = where(e);
+      const s = start.current;
+      setBox({ x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) });
+    },
+    onPointerUp: (/** @type {PointerEvent} */ e) => {
+      if (!start.current) return;
+      e.stopPropagation();
+      start.current = null;
+      if (box && box.w >= 4 && box.h >= 4) {
+        onMarked({ page: pageIndex + 1, x: round(box.x / scale), y: round(box.y / scale), width: round(box.w / scale), height: round(box.h / scale) });
+      }
+      setBox(null);
+    },
+  } : {};
+  const mine = marks.filter((m) => m.page === pageIndex + 1);
+  if (!marking && !mine.length) return null;
+  return html`<div class=${marking ? 'mark-layer marking' : 'mark-layer'} ...${handlers}>
+    ${mine.map((m) => html`<div class="mark" style=${{ left: `${m.x * scale}px`, top: `${m.y * scale}px`, width: `${m.width * scale}px`, height: `${m.height * scale}px` }}>
+      <button type="button" aria-label="Unmark" onPointerDown=${(/** @type {Event} */ e) => e.stopPropagation()} onClick=${() => onUnmark(m)}>×</button>
+    </div>`)}
+    ${box && html`<div class="mark drawing" style=${{ left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.h}px` }}></div>`}
+  </div>`;
+}
+
+/**
+ * @param {{ documentId: string, controller: Controller, fieldTool?: string | null, marks?: any[] | null, marking?: boolean,
+ *   onMarked?: (m: any) => void, onUnmark?: (m: any) => void }} props
+ */
+function Pages({ documentId, controller, fieldTool = null, marks = null, marking = false, onMarked = () => {}, onUnmark = () => {} }) {
   const scroll = useScroll(documentId);
   const { currentPage, totalPages } = scroll.state;
   useEffect(() => {
@@ -447,6 +557,7 @@ function Pages({ documentId, controller, fieldTool = null }) {
           <${SelectionLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
           <${AnnotationLayer} documentId=${documentId} pageIndex=${pageIndex} scale=${scale} />
           ${fieldTool && html`<${DesignLayer} documentId=${documentId} tool=${fieldTool} pageIndex=${pageIndex} controller=${controller} />`}
+          ${marks && html`<${MarkLayer} documentId=${documentId} pageIndex=${pageIndex} marks=${marks} marking=${marking} onMarked=${onMarked} onUnmark=${onUnmark} />`}
         </${PagePointerProvider}>`} />
     </${Viewport}>
   </${GlobalPointerProvider}>`;

@@ -14,6 +14,8 @@
 // The organize attribute ("true") adds rotate, delete and drag-to-move to the thumbnails.
 // The design attribute ("true") adds tools to draw new form fields on the pages; addFormFields()
 // does the same from code. New fields come as od-change { type: 'fields', action: 'add', names }.
+// The redact attribute ("true") adds tools to mark areas and redact them for good; redact()
+// does the same from code. They come as od-change { type: 'redaction', pages, report }.
 import { h, render } from 'preact';
 import { App } from './app.js';
 import { STYLES } from './styles.js';
@@ -27,7 +29,7 @@ import * as core from '@open-documents/core';
  */
 
 export class OdViewer extends HTMLElement {
-  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize', 'design'];
+  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize', 'design', 'redact'];
 
   constructor() {
     super();
@@ -45,6 +47,9 @@ export class OdViewer extends HTMLElement {
     this.controller.design = {
       add: (/** @type {NewField} */ field) => this.addFormFields([field]),
       names: () => this.formFields().map((/** @type {any} */ f) => f.name),
+    };
+    this.controller.redaction = {
+      apply: (/** @type {any[]} */ areas) => this.redact({ areas }),
     };
     /** @type {{ page: number, pageCount: number }} */
     this.state = { page: 0, pageCount: 0 };
@@ -234,6 +239,25 @@ export class OdViewer extends HTMLElement {
   }
 
   /**
+   * Redact for good: areas as shown ({ page, x, y, width, height } in points) and words or
+   * patterns in `text`. What is under them is taken out of the document, and the result is
+   * checked; the report comes with the od-change event and is returned.
+   *
+   * @param {{ areas?: { page: number, x: number, y: number, width: number, height: number }[], text?: (string | RegExp)[], ignoreCase?: boolean, color?: string }} options
+   */
+  async redact(options) {
+    /** @type {any} */
+    let report = null;
+    const pages = [...new Set((options.areas ?? []).map((a) => a.page))];
+    await this.#reshape(
+      { type: 'redaction', action: 'apply', pages, get report() { return report; } },
+      (bytes) => core.redact(bytes, { ...options, onReport: (r) => (report = r) }),
+      this.page,
+    );
+    return report;
+  }
+
+  /**
    * Save what is shown, change it with the library, and show the result where the reader was.
    *
    * @param {{ type?: string, action: string, pages: number[], names?: string[] }} change
@@ -253,7 +277,7 @@ export class OdViewer extends HTMLElement {
     const name = this.#name;
     const result = await this.load(await op(await this.save()), { name });
     this.goToPage(Math.min(page, result.pageCount));
-    this.controller.emit('od-change', { type: 'pages', ...change });
+    this.controller.emit('od-change', { type: 'pages', ...change, ...('report' in change ? { report: change.report } : {}) });
     return result;
   }
 
@@ -279,6 +303,7 @@ export class OdViewer extends HTMLElement {
           author: this.getAttribute('author') ?? '',
           organize: this.getAttribute('organize') === 'true',
           design: this.getAttribute('design') === 'true',
+          redact: this.getAttribute('redact') === 'true',
           controller: this.controller,
           pending: this.pending,
         }),
