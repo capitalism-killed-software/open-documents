@@ -20,9 +20,11 @@ Pages, thumbnails, zoom, page moves, search with highlights, text selection, and
 boxes, notes and boxes, with undo and redo. With `organize="true"`, the thumbnails get buttons
 to turn and delete pages, and can be dragged to put pages in a new order; annotations go with
 their page. Form fields can be filled in on the page or from code. With `design="true"`, a
-toolbar adds new fields: pick text field, check box, dropdown or list, drag a box on the page
-(or click for a usual size), name it, and it is a real field. `save()` writes everything into
-the PDF.
+toolbar adds new fields: pick text field, check box, dropdown, list or signature, drag a box on
+the page (or click for a usual size), name it, and it is a real field (a signature field stays
+empty, to be signed on the server). With `redact="true"`, mark areas on the pages and redact
+them: what is under them is taken out of the document for good and the result is checked.
+`save()` writes everything into the PDF.
 
 ```js
 const viewer = document.querySelector('od-viewer');
@@ -38,6 +40,7 @@ viewer.formFields();                                   // [{ name, type, value, 
 viewer.getFormValues();                                // { name: 'Sample Person', agree: 'Yes' }
 await viewer.setFormValues({ notes: 'Filled in', colour: 'blue' });
 await viewer.addFormFields([{ type: 'text', name: 'email', page: 1, x: 72, y: 600, width: 200, height: 20 }]);
+const report = await viewer.redact({ text: ['Sam Sample'], areas: [{ page: 2, x: 72, y: 90, width: 200, height: 14 }] });
 viewer.addEventListener('od-page', (e) => console.log(e.detail.page, e.detail.pageCount));
 viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.annotation));
 ```
@@ -52,14 +55,16 @@ viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.
 | `author` | the name written into new annotations |
 | `organize` | `"true"` to turn, delete and move pages from the thumbnails |
 | `design` | `"true"` to draw new form fields on the pages |
+| `redact` | `"true"` to mark areas and redact them |
 | `fonts-url` | where you serve EmbedPDF's fallback fonts, for files that use Chinese, Japanese, Korean, Arabic or Hebrew fonts without including them. Nothing is fetched from anywhere else. |
 
 Events: `od-load` `{ pageCount, name }`, `od-page` `{ page, pageCount }`,
 `od-change` `{ type, page, annotation }` (`create`, `update` or `delete`; `ink`, `highlight`,
 `text` and so on) or `{ type: 'pages', action, pages }` (`rotate`, `delete`, `move`) or
-`{ type: 'field', page, name, value }` or `{ type: 'fields', action: 'add', names, pages }`, `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
+`{ type: 'field', page, name, value }` or `{ type: 'fields', action: 'add', names, pages }` or
+`{ type: 'redaction', action: 'apply', pages, report }`, `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
 `ENGINE_ERROR`).
 
 Style it from outside with `--od-height`, `--od-bg`, `--od-bar`, `--od-ink`, `--od-muted`,
-`--od-line` and `--od-accent`, or the `toolbar`, `sidebar`, `annotation-toolbar` and
-`field-toolbar` parts.
+`--od-line` and `--od-accent`, or the `toolbar`, `sidebar`, `annotation-toolbar`,
+`field-toolbar` and `redaction-toolbar` parts.

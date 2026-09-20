@@ -97,7 +97,7 @@ In the browser the engine runs on the page, so files never leave the computer: s
 
 A PDF viewer for any web page, as a Web Component, so it works in plain HTML and in every
 front-end framework: pages, thumbnails, zoom, search, text selection, annotations, form filling,
-drawing new form fields, and turning, deleting and reordering pages.
+drawing new form fields, redacting, and turning, deleting and reordering pages.
 
 ```html
 <script type="module">import '@open-documents/viewer';</script>
@@ -115,7 +115,7 @@ document in view with the library and shows the result.
 - **From PDF:** Word with flowing text
 - **More:** annotations from code, full PDF/A validation (veraPDF), long-term signature
   validation (PAdES B-LT), fonts beyond Latin
-- **Viewer:** signing, redaction
+- **Viewer:** drawing a handwritten signature
 
 ## Develop
 
