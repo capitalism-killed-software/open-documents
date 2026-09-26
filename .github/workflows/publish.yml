@@ -27,7 +27,14 @@ jobs:
       - name: Publish
         # npm trusted publishing: npm trades the job's OIDC token for a short-lived one, so
         # there is no npm token stored anywhere. Each package lists this workflow on npmjs.com.
+        # a version already on npm is skipped, so a package published by hand first (a new
+        # package has to be, before trusted publishing can be set up for it) does not stop the rest
         run: |
-          for p in core node server client cli viewer; do
+          for p in core node server client cli viewer ocr; do
+            version=$(node -p "require('./packages/$p/package.json').version")
+            if npm view "@open-documents/$p@$version" version >/dev/null 2>&1; then
+              echo "@open-documents/$p@$version is on npm already"
+              continue
+            fi
             npm publish --workspace "@open-documents/$p" --access public --provenance ${{ inputs.dry_run && '--dry-run' || '' }}
           done
