@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
 import * as od from '@open-documents/core';
 import { createConverter } from '@open-documents/node';
@@ -11,9 +11,11 @@ email, JPEG, PNG, TIFF; needs LibreOffice for office files and Chromium for web 
   opendocs convert <file> [-o out.pdf] [--paper letter|a4|legal|a3|a5] [--landscape] [--javascript] [--pdfa 2]
   opendocs convert --url https://example.com -o page.pdf [--allow-host intranet.local]
 
-Out of PDF (keeps each page's layout: text boxes for the text, a picture for the rest):
-  opendocs to-docx <file.pdf> [-o out.docx] [--pages ...] [--no-background]
-  opendocs to-pptx <file.pdf> [-o out.pptx] [--pages ...] [--no-background]
+Out of PDF (keeps each page's layout: a text box for each line, a picture for the rest;
+the text can be edited but does not flow from line to line):
+  opendocs to-docx <file.pdf> [-o out.docx] [--pages ...] [--background | --no-background] [--dpi 150]
+  opendocs to-pptx <file.pdf> [-o out.pptx] [--pages ...] [--background | --no-background] [--dpi 150]
+  --background keeps the picture on scans with a text layer, where it is left out by default.
 
 Structure (headings, lists, tables, reading order; needs the Docling worker, see docs/api.md):
   opendocs to-markdown <file.pdf> [-o out.md] [--pages ...]     prints it without -o
@@ -151,6 +153,7 @@ const OPTIONS = {
   landscape: { type: 'boolean' },
   javascript: { type: 'boolean' },
   layer: { type: 'string' },
+  background: { type: 'boolean' },
   'no-background': { type: 'boolean' },
   exact: { type: 'boolean' },
   quality: { type: 'string' },
@@ -435,6 +438,7 @@ async function render({ files, values, io }) {
       password: values.password,
     });
     const folder = values.output ?? '.';
+    await mkdir(folder, { recursive: true });
     for (const p of pages) {
       const target = join(folder, `${stem(files[0])}-${p.page}.png`);
       await writeFile(target, p.data);
@@ -467,7 +471,13 @@ async function text({ files, values, io }) {
 async function office({ files, values, io }, kind) {
   const target = values.output ?? `${stem(files[0])}.${kind}`;
   refuseOverwrite(target, files);
-  const options = { pages: values.pages, password: values.password, background: values['no-background'] ? false : undefined };
+  if (values.background && values['no-background']) throw new od.OpenDocumentsError('INVALID_OPTION', 'Use --background or --no-background, not both.');
+  const options = {
+    pages: values.pages,
+    password: values.password,
+    background: values.background ? true : values['no-background'] ? false : undefined,
+    dpi: values.dpi === undefined ? undefined : integer(values.dpi, '--dpi'),
+  };
   const bytes = await readFile(files[0]);
   const out = kind === 'docx' ? await od.toDocx(bytes, options) : await od.toPptx(bytes, options);
   await writeFile(target, out);
@@ -727,6 +737,7 @@ async function split({ files, values, io }) {
   };
   const parts = await od.split(await readFile(files[0]), options);
   const folder = values.output ?? '.';
+  await mkdir(folder, { recursive: true });
   const digits = String(parts.length).length;
   for (const [i, part] of parts.entries()) {
     const target = join(folder, `${stem(files[0])}-${String(i + 1).padStart(digits, '0')}.pdf`);
@@ -750,6 +761,7 @@ async function withConverter(use) {
 
 /** @param {Context} ctx */
 async function convert({ files, values, io }) {
+  if (values.output !== undefined) onlyPdf(values.output, Boolean(values.url));
   const converter = createConverter();
   try {
     const layout = { format: values.paper, landscape: values.landscape };
@@ -769,6 +781,38 @@ async function convert({ files, values, io }) {
   } finally {
     await converter.close();
   }
+}
+
+// What people try to make with convert, and the command that makes it from a PDF.
+const OTHER_WAY = {
+  '.docx': ['a Word file', 'to-docx'],
+  '.doc': ['a Word file', 'to-docx'],
+  '.odt': ['a Word file', 'to-docx'],
+  '.pptx': ['a PowerPoint file', 'to-pptx'],
+  '.md': ['Markdown', 'to-markdown'],
+  '.html': ['HTML', 'to-html'],
+  '.htm': ['HTML', 'to-html'],
+  '.json': ['JSON', 'to-json'],
+  '.xlsx': ['an Excel file', 'to-xlsx'],
+  '.txt': ['plain text', 'text'],
+  '.png': ['a picture of a page', 'render'],
+};
+
+/**
+ * convert always writes a PDF, whatever the name says. Refuse names that promise something else
+ * before any work is done, and point at the command that goes the other way.
+ *
+ * @param {string} target
+ * @param {boolean} page  converting a web page, which no other command reads
+ */
+function onlyPdf(target, page) {
+  const ext = extname(target).toLowerCase();
+  if (ext === '' || ext === '.pdf') return;
+  const other = page ? undefined : OTHER_WAY[/** @type {keyof typeof OTHER_WAY} */ (ext)];
+  throw new od.OpenDocumentsError(
+    'INVALID_OPTION',
+    other ? `opendocs convert makes PDF files. For ${other[0]} from a PDF, use opendocs ${other[1]}.` : 'opendocs convert makes PDF files. Name the output something.pdf.',
+  );
 }
 
 /** @param {Context} ctx */

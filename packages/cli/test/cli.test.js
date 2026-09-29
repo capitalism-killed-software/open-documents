@@ -275,6 +275,15 @@ test('ocr makes a scan searchable and says what it did with each page', async ()
   assert.match(said, /^page 2: has text already, left alone$/m);
   assert.match((await extractText(await readFile(out)))[0].text, /quick brown fox/);
 
+  const media = async (/** @type {string[]} */ extra) => {
+    const { unzipSync } = await import('fflate');
+    const target = join(dir, 'scan.docx');
+    assert.equal((await run(['to-docx', out, '--pages', '1', ...extra, '-o', target])).code, 0);
+    return Object.keys(unzipSync(await readFile(target))).filter((n) => n.startsWith('word/media/'));
+  };
+  assert.deepEqual(await media([]), [], 'the scan would show every word twice');
+  assert.deepEqual(await media(['--background']), ['word/media/page1.png']);
+
   const json = await run(['ocr', file, '--json', '--pages', '1', '--dpi', '150']);
   assert.equal(json.code, 0);
   assert.ok(JSON.parse(json.out)[0].words.some((/** @type {{ text: string }} */ w) => w.text === 'fox'));
@@ -294,6 +303,42 @@ test('to-docx and to-pptx write office files', async () => {
   assert.equal(slides.code, 0);
   const entries = Object.keys(unzipSync(await readFile(join(dir, 'two.pptx'))));
   assert.ok(entries.includes('ppt/slides/slide2.xml') && !entries.includes('ppt/slides/slide3.xml'));
+});
+
+test('to-docx draws the picture behind the text at the resolution asked for', async () => {
+  const { unzipSync } = await import('fflate');
+  const { imagesToPdf } = await import('@open-documents/core');
+  const photo = join(dir, 'photo-page.pdf');
+  await writeFile(photo, await imagesToPdf([pngImage({ width: 200, height: 100 })]));
+  const widthAt = async (/** @type {string} */ dpi) => {
+    const target = join(dir, `photo-${dpi}.docx`);
+    assert.equal((await run(['to-docx', photo, '--dpi', dpi, '-o', target])).code, 0);
+    const png = unzipSync(await readFile(target))['word/media/page1.png'];
+    return new DataView(png.buffer, png.byteOffset).getUint32(16);
+  };
+  assert.equal(await widthAt('144'), 2 * await widthAt('72'));
+  const both = await run(['to-docx', photo, '--background', '--no-background']);
+  assert.deepEqual([both.code, both.err], [1, 'error: Use --background or --no-background, not both.\n']);
+});
+
+test('convert only makes PDF files, and names the command for the other way', async () => {
+  const docx = await run(['convert', pdf, '-o', join(dir, 'not-written.docx')]);
+  assert.deepEqual([docx.code, docx.err], [1, 'error: opendocs convert makes PDF files. For a Word file from a PDF, use opendocs to-docx.\n']);
+  await assert.rejects(readFile(join(dir, 'not-written.docx')), { code: 'ENOENT' });
+  assert.match((await run(['convert', pdf, '-o', join(dir, 'notes.MD')])).err, /use opendocs to-markdown\.$/m);
+  assert.match((await run(['convert', pdf, '-o', join(dir, 'page.png')])).err, /use opendocs render\.$/m);
+  assert.match((await run(['convert', pdf, '-o', join(dir, 'notes.txt')])).err, /use opendocs text\.$/m);
+  const url = await run(['convert', '--url', 'https://example.com', '-o', join(dir, 'page.html')]);
+  assert.deepEqual([url.code, url.err], [1, 'error: opendocs convert makes PDF files. Name the output something.pdf.\n']);
+});
+
+test('split and render make the folder they write into', async () => {
+  const parts = join(dir, 'new', 'parts');
+  assert.equal((await run(['split', pdf, '--every', '1', '-o', parts])).code, 0);
+  assert.equal(await pagesOf(join(parts, 'sample-3.pdf')), 1);
+  const shots = join(dir, 'new', 'shots');
+  assert.equal((await run(['render', pdf, '--pages', '1-2', '--dpi', '36', '-o', shots])).code, 0);
+  assert.ok((await readFile(join(shots, 'sample-2.png'))).length > 0);
 });
 
 test('to-markdown prints, to-xlsx writes a workbook', { skip: await doclingMissing() }, async () => {
