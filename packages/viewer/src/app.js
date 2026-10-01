@@ -48,7 +48,11 @@ const html = htm.bind(h);
  * @property {{ rotate: (page: number, angle: number) => Promise<any>, remove: (page: number) => Promise<any>, move: (from: number, to: number) => Promise<any> }} [organize]
  * @property {{ add: (field: any) => Promise<any>, names: () => string[] }} [design]
  * @property {{ apply: (areas: any[]) => Promise<any>, message?: string, listeners?: Set<(text: string) => void> }} [redaction]
+ * @property {{ open: (file: File) => Promise<any>, download: () => Promise<void> }} [files]
+ * @property {(detail: { code: string, message: string }) => void} [engineFailed]
  */
+
+/** @typedef {{ open: boolean, download: boolean }} FileButtons */
 
 /** The kinds of field the designer draws: tool id, label, and the start of new names. */
 export const FIELD_TOOLS = [
@@ -71,9 +75,9 @@ export const TOOLS = [
 ];
 
 /**
- * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, author: string, controller: Controller, pending: { current: any } }} props
+ * @param {{ wasmUrl: string, fontsUrl: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, design: boolean, redact: boolean, files: FileButtons, author: string, controller: Controller, pending: { current: any } }} props
  */
-export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, design, redact, author, controller, pending }) {
+export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, design, redact, files, author, controller, pending }) {
   // the engine restarts whenever its settings change, so keep the font settings the same object
   const fontFallback = useMemo(() => fontConfig(fontsUrl), [fontsUrl]);
   const { engine, isLoading, error } = usePdfiumEngine({ wasmUrl, worker: true, fontFallback });
@@ -104,10 +108,12 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, d
     createPluginRegistration(FormPluginPackage),
   ], [author]);
 
-  if (error) {
-    controller.emit('od-error', { code: 'ENGINE_ERROR', message: String(error.message ?? error) });
-    return html`<div class="frame"><p class="message error">The PDF engine could not start.</p></div>`;
-  }
+  // told once, outside rendering: a failed engine fails load() and is sent as od-error
+  useEffect(() => {
+    if (error) controller.engineFailed?.({ code: 'ENGINE_ERROR', message: String(error.message ?? error) });
+  }, [error]);
+
+  if (error) return html`<div class="frame"><p class="message error">The PDF engine could not start.</p></div>`;
   if (isLoading || !engine) return html`<div class="frame"><p class="message">Loading…</p></div>`;
 
   return html`<${EmbedPDF}
@@ -119,14 +125,14 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, d
       if (pending.current) controller.open?.(pending.current);
     }}
   >
-    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar || organize} annotate=${annotate} organize=${organize} design=${design} redact=${redact} controller=${controller} />`}
+    ${(/** @type {any} */ { activeDocumentId }) => html`<${Shell} documentId=${activeDocumentId} toolbar=${toolbar} sidebar=${sidebar || organize} annotate=${annotate} organize=${organize} design=${design} redact=${redact} files=${files} controller=${controller} />`}
   </${EmbedPDF}>`;
 }
 
 /**
- * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, controller: Controller }} props
+ * @param {{ documentId: string | null, toolbar: boolean, sidebar: boolean, annotate: boolean, organize: boolean, design: boolean, redact: boolean, files: FileButtons, controller: Controller }} props
  */
-function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redact, controller }) {
+function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redact, files, controller }) {
   const [showSidebar, setShowSidebar] = useState(sidebar);
   // areas marked for redaction, in points as shown, not yet applied
   const [marks, setMarks] = useState(/** @type {{ page: number, x: number, y: number, width: number, height: number }[]} */ ([]));
@@ -140,7 +146,12 @@ function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redac
     if (!design) setFieldTool(null);
   }, [design]);
   useEffect(() => setShowSidebar(sidebar), [sidebar]);
-  if (!documentId) return html`<div class="frame"><p class="message">No document.</p></div>`;
+  if (!documentId) {
+    return html`<div class="frame"><div class="message">
+      <p>No document.</p>
+      ${files.open && html`<${OpenButton} controller=${controller} />`}
+    </div></div>`;
+  }
   return html`<${DocumentContent} documentId=${documentId}>
     ${(/** @type {any} */ { isLoaded, isError, documentState }) => {
       if (isError) {
@@ -149,7 +160,7 @@ function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redac
       }
       if (!isLoaded) return html`<div class="frame"><p class="message">Opening…</p></div>`;
       return html`<div class="frame">
-        ${toolbar && html`<${Toolbar} documentId=${documentId} showSidebar=${showSidebar} onToggleSidebar=${() => setShowSidebar((s) => !s)} />`}
+        ${toolbar && html`<${Toolbar} documentId=${documentId} showSidebar=${showSidebar} onToggleSidebar=${() => setShowSidebar((s) => !s)} files=${files} controller=${controller} />`}
         ${toolbar && annotate && html`<${AnnotationTools} documentId=${documentId} />`}
         ${toolbar && design && html`<${FieldTools} active=${fieldTool} onPick=${(/** @type {string | null} */ t) => { setFieldTool(t); if (t) setMarking(false); }} />`}
         ${toolbar && redact && html`<${RedactTools} marking=${marking} marks=${marks} controller=${controller}
@@ -169,9 +180,27 @@ function Shell({ documentId, toolbar, sidebar, annotate, organize, design, redac
 }
 
 /**
- * @param {{ documentId: string, showSidebar: boolean, onToggleSidebar: () => void }} props
+ * A button that picks a PDF from the reader's computer and shows it.
+ *
+ * @param {{ controller: Controller }} props
  */
-function Toolbar({ documentId, showSidebar, onToggleSidebar }) {
+function OpenButton({ controller }) {
+  const input = useRef(/** @type {HTMLInputElement | null} */ (null));
+  /** @param {Event} e */
+  const picked = (e) => {
+    const field = /** @type {HTMLInputElement} */ (e.currentTarget);
+    const file = field.files?.[0];
+    field.value = ''; // picking the same file again still opens it
+    if (file) controller.files?.open(file);
+  };
+  return html`<button title="Open a PDF" onClick=${() => input.current?.click()}>Open</button>
+    <input ref=${input} type="file" accept="application/pdf,.pdf" hidden onChange=${picked} />`;
+}
+
+/**
+ * @param {{ documentId: string, showSidebar: boolean, onToggleSidebar: () => void, files: FileButtons, controller: Controller }} props
+ */
+function Toolbar({ documentId, showSidebar, onToggleSidebar, files, controller }) {
   const zoom = useZoom(documentId);
   const scroll = useScroll(documentId);
   const search = useSearch(documentId);
@@ -193,8 +222,12 @@ function Toolbar({ documentId, showSidebar, onToggleSidebar }) {
   const found = search.state?.total ?? 0;
   const active = search.state?.activeResultIndex ?? -1;
 
+  const download = () => controller.files?.download().catch((err) => controller.emit('od-error', { code: 'ENGINE_ERROR', message: String(err?.message ?? err) }));
+
   return html`<div class="bar" part="toolbar">
     <button title="Pages" aria-label="Show pages" aria-pressed=${String(showSidebar)} onClick=${onToggleSidebar}>☰</button>
+    ${files.open && html`<${OpenButton} controller=${controller} />`}
+    ${files.download && html`<button title="Download" onClick=${download}>Download</button>`}
     <button title="Previous page" aria-label="Previous page" disabled=${current <= 1} onClick=${() => scroll.provides?.scrollToPreviousPage()}>‹</button>
     <input class="page-input" aria-label="Page" value=${pageText} onInput=${(/** @type {any} */ e) => setPageText(e.currentTarget.value)} onKeyDown=${(/** @type {KeyboardEvent} */ e) => e.key === 'Enter' && goTo()} onBlur=${goTo} />
     <span class="muted">of ${total}</span>

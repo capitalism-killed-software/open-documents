@@ -528,3 +528,110 @@ test('redact from code, and a signature field from the designer tools', { skip }
     await page.close();
   }
 });
+
+test('a file that cannot be fetched, or an engine that cannot start, says so', { skip }, async () => {
+  const page = await /** @type {import('playwright-core').Browser} */ (browser).newPage();
+  try {
+    await page.goto(`${base}/`);
+    const missing = await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      const seen = /** @type {string[]} */ ([]);
+      v.addEventListener('od-error', (/** @type {any} */ e) => seen.push(e.detail.code));
+      const failure = await v.load('./missing.pdf').then(() => null, (/** @type {any} */ e) => e.code);
+      return { failure, seen };
+    });
+    assert.deepEqual(missing, { failure: 'INVALID_INPUT', seen: ['INVALID_INPUT'] });
+    await inViewer(page, '[role="alert"]').filter({ hasText: 'missing.pdf' }).waitFor();
+
+    const fromSrc = await page.evaluate(() => new Promise((resolve) => {
+      const v = document.createElement('od-viewer');
+      v.setAttribute('wasm-url', './pdfium.wasm');
+      v.addEventListener('od-error', (/** @type {any} */ e) => resolve(e.detail.code));
+      v.setAttribute('src', './nothing-here.pdf');
+      document.body.append(v);
+    }));
+    assert.equal(fromSrc, 'INVALID_INPUT');
+
+    const engine = await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.createElement('od-viewer'));
+      const seen = /** @type {string[]} */ ([]);
+      v.addEventListener('od-error', (/** @type {any} */ e) => seen.push(e.detail.code));
+      v.setAttribute('wasm-url', './no-such.wasm');
+      document.body.append(v);
+      const failure = await Promise.race([
+        v.load('./five.pdf').then(() => 'loaded', (/** @type {any} */ e) => e.code),
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 8000)),
+      ]);
+      const again = await v.load('./five.pdf').then(() => 'loaded', (/** @type {any} */ e) => e.code);
+      return { failure, again, seen };
+    });
+    assert.deepEqual(engine, { failure: 'ENGINE_ERROR', again: 'ENGINE_ERROR', seen: ['ENGINE_ERROR'] });
+  } finally {
+    await page.close();
+  }
+});
+
+test('an encrypted file asks for its password on the page', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).load('./locked.pdf').catch(() => {}));
+    const input = inViewer(page, '.unlock input[type="password"]');
+    await input.waitFor();
+    await input.fill('wrong');
+    await inViewer(page, '.unlock button[type="submit"]').click();
+    await inViewer(page, '.unlock .draft-error').filter({ hasText: 'did not open it' }).waitFor();
+    await page.evaluate(() => {
+      /** @type {any} */ (window).loaded = new Promise((resolve) => document.getElementById('v')?.addEventListener('od-load', (/** @type {any} */ e) => resolve(e.detail), { once: true }));
+    });
+    await input.fill('open');
+    await inViewer(page, '.unlock button[type="submit"]').click();
+    assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).loaded), { pageCount: 2, name: 'locked.pdf' });
+    assert.equal(await inViewer(page, '.unlock').count(), 0);
+
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('password-prompt', 'false'));
+    const code = await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).load('./locked.pdf').then(() => null, (/** @type {any} */ e) => e.code));
+    assert.equal(code, 'PASSWORD_REQUIRED');
+    assert.equal(await inViewer(page, '.unlock').count(), 0);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('open and download buttons, and download() from code', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    assert.equal(await inViewer(page, 'button[title="Download"]').count(), 0, 'off unless asked for');
+    await page.evaluate(() => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      v.setAttribute('open', 'true');
+      v.setAttribute('download', 'true');
+    });
+    const [download] = await Promise.all([page.waitForEvent('download'), inViewer(page, 'button[title="Download"]').click()]);
+    assert.equal(download.suggestedFilename(), 'five.pdf');
+    assert.equal((await inspect(await readFile(/** @type {string} */ (await download.path())))).pageCount, 5);
+
+    const [named] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => /** @type {any} */ (document.getElementById('v')).download('copy.pdf'))]);
+    assert.equal(named.suggestedFilename(), 'copy.pdf');
+
+    await page.evaluate(() => {
+      /** @type {any} */ (window).loaded = new Promise((resolve) => document.getElementById('v')?.addEventListener('od-load', (/** @type {any} */ e) => resolve(e.detail), { once: true }));
+    });
+    const picked = (await textDocument({ pages: 2 })).bytes;
+    await inViewer(page, '.bar input[type="file"]').setInputFiles({ name: 'picked.pdf', mimeType: 'application/pdf', buffer: Buffer.from(picked) });
+    assert.deepEqual(await page.evaluate(() => /** @type {any} */ (window).loaded), { pageCount: 2, name: 'picked.pdf' });
+
+    const empty = await page.evaluate(() => {
+      const v = document.createElement('od-viewer');
+      v.setAttribute('wasm-url', './pdfium.wasm');
+      v.setAttribute('open', 'true');
+      v.id = 'empty';
+      document.body.append(v);
+    });
+    assert.equal(empty, undefined);
+    await page.locator('#empty >> css=input[type="file"]').waitFor({ state: 'attached' });
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});

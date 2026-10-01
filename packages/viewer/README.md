@@ -24,7 +24,9 @@ toolbar adds new fields: pick text field, check box, dropdown, list or signature
 the page (or click for a usual size), name it, and it is a real field (a signature field stays
 empty, to be signed on the server). With `redact="true"`, mark areas on the pages and redact
 them: what is under them is taken out of the document for good and the result is checked.
-`save()` writes everything into the PDF.
+`save()` writes everything into the PDF. With `open="true"` and `download="true"` the toolbar
+gets Open and Download buttons, so the viewer works as a small editor on its own. An encrypted
+file asks for its password on the page.
 
 ```js
 const viewer = document.querySelector('od-viewer');
@@ -33,6 +35,7 @@ viewer.goToPage(3);
 viewer.zoomIn(); viewer.zoomOut(); viewer.fitWidth();
 const matches = await viewer.search('total due');
 const bytes = await viewer.save();                     // the document as PDF bytes
+await viewer.download('contract-signed.pdf');          // the same, saved to the reader's computer
 viewer.setTool('highlight');                           // or 'ink', 'freeText', 'textComment', null
 viewer.undo(); viewer.redo();
 await viewer.rotatePages([2], 90); await viewer.deletePages([4]); await viewer.movePage(5, 1);
@@ -56,6 +59,9 @@ viewer.addEventListener('od-change', (e) => console.log(e.detail.type, e.detail.
 | `organize` | `"true"` to turn, delete and move pages from the thumbnails |
 | `design` | `"true"` to draw new form fields on the pages |
 | `redact` | `"true"` to mark areas and redact them |
+| `open` | `"true"` for an Open button that picks a PDF from the reader's computer |
+| `download` | `"true"` for a Download button that saves the document with every change |
+| `password-prompt` | `"false"` to leave asking for passwords to your page (`load(pdf, { password })`) |
 | `fonts-url` | where you serve EmbedPDF's fallback fonts, for files that use Chinese, Japanese, Korean, Arabic or Hebrew fonts without including them. Nothing is fetched from anywhere else. |
 
 Events: `od-load` `{ pageCount, name }`, `od-page` `{ page, pageCount }`,
@@ -63,7 +69,9 @@ Events: `od-load` `{ pageCount, name }`, `od-page` `{ page, pageCount }`,
 `text` and so on) or `{ type: 'pages', action, pages }` (`rotate`, `delete`, `move`) or
 `{ type: 'field', page, name, value }` or `{ type: 'fields', action: 'add', names, pages }` or
 `{ type: 'redaction', action: 'apply', pages, report }`, `od-error` `{ code, message }` (`PASSWORD_REQUIRED`, `DAMAGED_FILE`,
-`ENGINE_ERROR`).
+`INVALID_INPUT` for a file that could not be fetched, `ENGINE_ERROR` when `pdfium.wasm` is not
+where `wasm-url` says). Each also rejects the `load()` that caused it, and the last two are shown
+on the page.
 
 Style it from outside with `--od-height`, `--od-bg`, `--od-bar`, `--od-ink`, `--od-muted`,
 `--od-line` and `--od-accent`, or the `toolbar`, `sidebar`, `annotation-toolbar`,

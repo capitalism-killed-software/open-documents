@@ -10,6 +10,7 @@ export const STYLES = `
   --od-accent: #0b63ce;
   --od-height: 600px;
   display: block;
+  position: relative;
   height: var(--od-height);
   font: 13px/1.4 -apple-system, "Segoe UI", "Liberation Sans", Arial, sans-serif;
   color: var(--od-ink);
@@ -61,5 +62,14 @@ export const STYLES = `
 .mark.drawing { pointer-events: none; }
 .mark button { position: absolute; top: -10px; right: -10px; width: 20px; height: 20px; padding: 0; border: 1px solid #b3261e; border-radius: 50%; background: #fff; color: #b3261e; font: 12px/1 sans-serif; cursor: pointer; pointer-events: auto; }
 .message { margin: auto; padding: 24px; color: var(--od-muted); text-align: center; }
+.message p { margin: 0 0 12px; }
+.message button { font: inherit; height: 30px; padding: 0 14px; border: 1px solid var(--od-accent); border-radius: 5px; background: var(--od-accent); color: #fff; cursor: pointer; }
 .message.error { color: #b3261e; }
+/* over the viewer: the password prompt, and why a file could not be fetched */
+.overlay { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); border-radius: 6px; }
+.overlay .unlock { position: static; min-width: 260px; }
+.overlay .unlock p { margin: 0; color: var(--od-ink); }
+.problem { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 20; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #fdecea; color: #b3261e; border: 1px solid #f5c2bd; border-radius: 6px; }
+.problem span { flex: 1; }
+.problem button { font: inherit; width: 24px; height: 24px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
 `;

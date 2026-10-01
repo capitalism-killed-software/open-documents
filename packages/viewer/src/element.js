@@ -16,6 +16,10 @@
 // does the same from code. New fields come as od-change { type: 'fields', action: 'add', names }.
 // The redact attribute ("true") adds tools to mark areas and redact them for good; redact()
 // does the same from code. They come as od-change { type: 'redaction', pages, report }.
+// The open and download attributes ("true") add Open and Download buttons; download(name)
+// does the second from code. An encrypted file asks for its password on the page, unless
+// password-prompt is "false". A file that cannot be fetched, or an engine that cannot start,
+// is shown on the page, sent as od-error and rejects load().
 import { h, render } from 'preact';
 import { App } from './app.js';
 import { STYLES } from './styles.js';
@@ -29,7 +33,7 @@ import * as core from '@open-documents/core';
  */
 
 export class OdViewer extends HTMLElement {
-  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize', 'design', 'redact'];
+  static observedAttributes = ['src', 'wasm-url', 'fonts-url', 'toolbar', 'sidebar', 'annotate', 'author', 'organize', 'design', 'redact', 'open', 'download', 'password-prompt'];
 
   constructor() {
     super();
@@ -50,6 +54,20 @@ export class OdViewer extends HTMLElement {
     };
     this.controller.redaction = {
       apply: (/** @type {any[]} */ areas) => this.redact({ areas }),
+    };
+    this.controller.files = {
+      open: (/** @type {File} */ file) => this.load(file).catch(() => {}),
+      download: () => this.download(),
+    };
+    this.controller.engineFailed = (/** @type {{ code: string, message: string }} */ detail) => {
+      if (this.#engineError) return;
+      this.#engineError = detail;
+      this.#problem = detail.message;
+      this.#render();
+      this.controller.emit('od-error', detail);
+      const job = this.pending.current;
+      this.pending.current = null;
+      job?.fail(withCode(detail));
     };
     /** @type {{ page: number, pageCount: number }} */
     this.state = { page: 0, pageCount: 0 };
@@ -75,7 +93,14 @@ export class OdViewer extends HTMLElement {
   attributeChangedCallback(name, before, after) {
     if (!this.isConnected || before === after) return;
     if (name === 'src' && after) this.load(after).catch(() => {});
-    else if (name !== 'src') this.#render();
+    else if (name !== 'src') {
+      if (name === 'wasm-url') {
+        // a new engine gets its own chance
+        this.#engineError = null;
+        this.#problem = '';
+      }
+      this.#render();
+    }
   }
 
   /** Page number in view, from 1. */
@@ -95,8 +120,24 @@ export class OdViewer extends HTMLElement {
    * @returns {Promise<{ pageCount: number }>}
    */
   async load(source, options = {}) {
-    const { buffer, name } = await toBuffer(source, options.name);
+    if (this.#engineError) throw withCode(this.#engineError);
+    /** @type {{ buffer: ArrayBuffer, name: string }} */
+    let file;
+    try {
+      file = await toBuffer(source, options.name);
+    } catch (err) {
+      const detail = { code: /** @type {any} */ (err)?.code ?? 'INVALID_INPUT', message: String(/** @type {any} */ (err)?.message ?? err) };
+      this.controller.emit('od-error', detail);
+      this.#problem = detail.message;
+      this.#render();
+      throw err;
+    }
+    const { buffer, name } = file;
     return new Promise((done, fail) => {
+      if (this.#engineError) {
+        fail(withCode(this.#engineError));
+        return;
+      }
       const job = { buffer, name, password: options.password, done, fail };
       this.pending.current = job;
       if (this.controller.registry) this.#open(job);
@@ -114,6 +155,25 @@ export class OdViewer extends HTMLElement {
     if (!exporter || !id) throw new Error('No document is open.');
     const buffer = await taskToPromise(exporter.forDocument(id).saveAsCopy());
     return new Uint8Array(/** @type {ArrayBuffer} */ (buffer));
+  }
+
+  /**
+   * Save the document as it is now, with any changes, to the reader's computer.
+   *
+   * @param {string} [name]  the file name offered; the name it was opened with by default
+   */
+  async download(name) {
+    const bytes = await this.save();
+    const url = URL.createObjectURL(new Blob([/** @type {Uint8Array<ArrayBuffer>} */ (bytes)], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name ?? this.#name;
+    link.style.display = 'none';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    // the browser has the file by the time the click returns; the delay is only to be kind to old ones
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   /** @param {number} page  from 1 */
@@ -283,6 +343,12 @@ export class OdViewer extends HTMLElement {
 
   #coreReady = false;
   #name = 'document.pdf';
+  /** @type {{ code: string, message: string } | null} */
+  #engineError = null;
+  /** why the last load failed before it reached the engine, shown until dismissed or a file opens */
+  #problem = '';
+  /** @type {{ buffer: ArrayBuffer, name: string, wrong: boolean } | null} an encrypted file waiting for its password */
+  #locked = null;
 
   #render() {
     const wasm = this.getAttribute('wasm-url');
@@ -290,6 +356,7 @@ export class OdViewer extends HTMLElement {
       render(h('p', { class: 'message error' }, 'Set wasm-url to where pdfium.wasm is served.'), /** @type {ShadowRoot} */ (this.shadowRoot));
       return;
     }
+    this.#checkWasm(new URL(wasm, document.baseURI).href);
     const fonts = this.getAttribute('fonts-url');
     render(
       h('div', { style: 'display:contents' }, [
@@ -304,12 +371,73 @@ export class OdViewer extends HTMLElement {
           organize: this.getAttribute('organize') === 'true',
           design: this.getAttribute('design') === 'true',
           redact: this.getAttribute('redact') === 'true',
+          files: { open: this.getAttribute('open') === 'true', download: this.getAttribute('download') === 'true' },
           controller: this.controller,
           pending: this.pending,
         }),
+        this.#overlay(),
       ]),
       /** @type {ShadowRoot} */ (this.shadowRoot),
     );
+  }
+
+  #checkedWasm = '';
+
+  /**
+   * The engine runs in a worker, and a worker whose pdfium.wasm is missing just stops: nothing
+   * tells the page, and every load() would wait for ever. Ask the server once for the file and
+   * report what is wrong instead, including a web page served in its place, which is what many
+   * development servers send for a path they do not have.
+   *
+   * @param {string} url
+   */
+  async #checkWasm(url) {
+    if (url === this.#checkedWasm) return;
+    this.#checkedWasm = url;
+    let problem = '';
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (res.status === 404 || res.status === 410) problem = `pdfium.wasm is not at ${url} (HTTP ${res.status}). Check wasm-url.`;
+      else if (res.ok && /text\/html/i.test(res.headers.get('content-type') ?? '')) problem = `${url} is a web page, not pdfium.wasm. Check wasm-url.`;
+    } catch (err) {
+      problem = `pdfium.wasm could not be fetched from ${url}: ${/** @type {Error} */ (err)?.message ?? err}`;
+    }
+    if (problem && url === this.#checkedWasm) this.controller.engineFailed?.({ code: 'ENGINE_ERROR', message: problem });
+  }
+
+  /** What sits over the viewer: a password prompt, or why a file could not be fetched. */
+  #overlay() {
+    const locked = this.#locked;
+    if (locked) {
+      /** @param {SubmitEvent} e */
+      const unlock = (e) => {
+        e.preventDefault();
+        const field = /** @type {HTMLFormElement} */ (e.currentTarget).elements.namedItem('password');
+        this.load(locked.buffer, { password: /** @type {HTMLInputElement} */ (field).value, name: locked.name }).catch(() => {});
+      };
+      const cancel = () => {
+        this.#locked = null;
+        this.#render();
+      };
+      return h('div', { class: 'overlay' }, h('form', { class: 'unlock draft-panel', onSubmit: unlock }, [
+        h('p', null, `${locked.name} is protected with a password.`),
+        h('label', null, ['Password', h('input', { type: 'password', name: 'password', autocomplete: 'off', autofocus: true })]),
+        locked.wrong && h('p', { class: 'draft-error', role: 'alert' }, 'That password did not open it.'),
+        h('div', { class: 'draft-buttons' }, [
+          h('button', { type: 'button', onClick: cancel }, 'Cancel'),
+          h('button', { type: 'submit' }, 'Open'),
+        ]),
+      ]));
+    }
+    if (!this.#problem) return null;
+    const dismiss = () => {
+      this.#problem = '';
+      this.#render();
+    };
+    return h('div', { class: 'problem', role: 'alert' }, [
+      h('span', null, this.#problem),
+      h('button', { type: 'button', 'aria-label': 'Dismiss', onClick: dismiss }, '✕'),
+    ]);
   }
 
   /** @param {{ buffer: ArrayBuffer, name: string, password?: string, done: (v: any) => void, fail: (e: any) => void }} job */
@@ -329,6 +457,11 @@ export class OdViewer extends HTMLElement {
       this.state.pageCount = pageCount;
       await this.#settled();
       this.#name = job.name;
+      if (this.#locked || this.#problem) {
+        this.#locked = null;
+        this.#problem = '';
+        this.#render();
+      }
       this.controller.emit('od-load', { pageCount, name: job.name });
       job.done({ pageCount });
     } catch (err) {
@@ -339,8 +472,12 @@ export class OdViewer extends HTMLElement {
         code: password ? 'PASSWORD_REQUIRED' : 'DAMAGED_FILE',
         message: password ? 'This file is encrypted: the password is missing or wrong.' : String(reason?.message ?? 'This file could not be opened.'),
       };
+      if (password && this.getAttribute('password-prompt') !== 'false') {
+        this.#locked = { buffer: job.buffer, name: job.name, wrong: Boolean(job.password) };
+        this.#render();
+      }
       this.controller.emit('od-error', detail);
-      job.fail(Object.assign(new Error(detail.message), { code: detail.code }));
+      job.fail(withCode(detail));
     }
   }
 
@@ -390,9 +527,20 @@ async function toBuffer(source, name) {
     return { buffer: await source.arrayBuffer(), name: name ?? (/** @type {any} */ (source).name || 'document.pdf') };
   }
   const url = new URL(String(source), document.baseURI);
-  const res = await fetch(url);
+  /** @type {Response} */
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    throw Object.assign(new Error(`Could not fetch ${url.pathname}: ${/** @type {Error} */ (err)?.message ?? err}`), { code: 'INVALID_INPUT' });
+  }
   if (!res.ok) throw Object.assign(new Error(`Could not fetch ${url.pathname}: HTTP ${res.status}`), { code: 'INVALID_INPUT' });
   return { buffer: await res.arrayBuffer(), name: name ?? decodeURIComponent(url.pathname.split('/').pop() || 'document.pdf') };
+}
+
+/** @param {{ code: string, message: string }} detail */
+function withCode(detail) {
+  return Object.assign(new Error(detail.message), { code: detail.code });
 }
 
 /**
