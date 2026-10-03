@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// the folder to serve: the one given, or this example's own dist/
+// the folder to serve: the one given, or this example's own dist/; then the port, or $PORT
 const root = process.argv[2] ? resolve(process.argv[2]) + sep : fileURLToPath(new URL('dist/', import.meta.url));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm' };
-const port = Number(process.env.PORT ?? 5174);
+const port = Number(process.argv[3] ?? process.env.PORT ?? 5174);
 
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
