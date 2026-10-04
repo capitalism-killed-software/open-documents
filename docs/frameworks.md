@@ -5,7 +5,7 @@ package once, serve `pdfium.wasm`, and use the tag.
 
 ```sh
 npm install @open-documents/viewer
-cp node_modules/@embedpdf/pdfium/dist/pdfium.wasm public/
+cp node_modules/@open-documents/viewer/dist/pdfium.wasm public/
 ```
 
 ## React (19)
@@ -71,10 +71,13 @@ tag in templates with `(od-change)="onChange($event)"` and `#viewer` for a refer
 
 ## Plain HTML
 
+A page with no bundler cannot import the package by name. Use the prebuilt file instead: copy
+`node_modules/@open-documents/viewer/dist/` to your site.
+
 ```html
-<script type="module">import '@open-documents/viewer';</script>
-<od-viewer src="/contract.pdf" wasm-url="/pdfium.wasm"></od-viewer>
+<script type="module" src="/od-viewer/od-viewer.js"></script>
+<od-viewer src="/contract.pdf" wasm-url="/od-viewer/pdfium.wasm" open="true" download="true"></od-viewer>
 ```
 
 Bundlers that copy assets for you (Vite's `?url` imports, for example) can supply the WASM path:
-`import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url'`, then `wasm-url={wasmUrl}`.
+`import wasmUrl from '@open-documents/viewer/dist/pdfium.wasm?url'`, then `wasm-url={wasmUrl}`.

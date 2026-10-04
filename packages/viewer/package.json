@@ -24,14 +24,16 @@
     ".": {
       "types": "./types/index.d.ts",
       "default": "./src/index.js"
-    }
+    },
+    "./dist/*": "./dist/*"
   },
   "files": [
     "src",
-    "types"
+    "types",
+    "dist"
   ],
   "scripts": {
-    "prepack": "node ../../tools/build-types.js viewer"
+    "prepack": "node ../../tools/build-types.js viewer && node ../../tools/build-viewer-bundle.js"
   },
   "engines": {
     "node": ">=24"

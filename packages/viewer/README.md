@@ -8,12 +8,26 @@ Nothing leaves the browser.
 npm install @open-documents/viewer
 ```
 
-Serve `node_modules/@embedpdf/pdfium/dist/pdfium.wasm` from your site, then:
+**On a plain page, with no bundler,** copy the package's `dist/` folder to your site. It holds
+the viewer as one file, `pdfium.wasm`, and `THIRD_PARTY_LICENSES.txt` for the code inside:
+
+```sh
+cp -r node_modules/@open-documents/viewer/dist public/od-viewer
+```
 
 ```html
-<script type="module">import '@open-documents/viewer';</script>
-<od-viewer src="/contract.pdf" wasm-url="/pdfium.wasm"></od-viewer>
+<script type="module" src="/od-viewer/od-viewer.js"></script>
+<od-viewer src="/contract.pdf" wasm-url="/od-viewer/pdfium.wasm"></od-viewer>
 ```
+
+**With a bundler** (Vite, webpack, esbuild, Rollup), import the package and serve
+`node_modules/@open-documents/viewer/dist/pdfium.wasm` from your site:
+
+```js
+import '@open-documents/viewer';
+```
+
+From a clone of the repository, `node tools/build-viewer-bundle.js` builds `dist/`.
 
 Pages, thumbnails, zoom, page moves, search with highlights, text selection, and with
 `annotate="true"` a second toolbar for highlights, underlines, strike-outs, pen drawing, text

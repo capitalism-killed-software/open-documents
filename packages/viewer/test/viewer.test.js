@@ -635,3 +635,31 @@ test('open and download buttons, and download() from code', { skip }, async () =
     await page.close();
   }
 });
+
+test('the prebuilt bundle works on a plain page, with no bundler, and carries its licences', { skip }, async () => {
+  const { buildViewerBundle } = await import('../../../tools/build-viewer-bundle.js');
+  const { packages } = await buildViewerBundle(join(dir, 'plain'));
+  const notice = await readFile(join(dir, 'plain', 'THIRD_PARTY_LICENSES.txt'), 'utf8');
+  for (const name of ['preact', 'htm', '@embedpdf/core', '@cantoo/pdf-lib']) {
+    assert.ok(packages.some((/** @type {{ name: string }} */ p) => p.name === name), `${name} is listed`);
+    assert.match(notice, new RegExp(`^== ${name.replace('/', '\\/')} \\S+ \\(`, 'm'));
+  }
+  assert.match(notice, /Permission is hereby granted, free of charge/, 'licence texts, not only names');
+  assert.doesNotMatch(notice, /^== @open-documents\//m, 'our own code is under the package licence');
+  await writeFile(join(dir, 'plain', 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,">
+    <script type="module" src="./od-viewer.js"></script></head><body>
+    <od-viewer id="v" src="../five.pdf" wasm-url="./pdfium.wasm" style="--od-height: 500px; width: 700px"></od-viewer>
+    </body></html>`);
+  const page = await /** @type {import('playwright-core').Browser} */ (browser).newPage();
+  /** @type {string[]} */
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    await page.goto(`${base}/plain/index.html`);
+    await page.locator('#v >> css=.page img').first().waitFor();
+    assert.match(await inViewer(page, '.bar').innerText(), /of 5/);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
