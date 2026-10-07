@@ -11,8 +11,9 @@ HTML, JSON and Excel, about two gigabytes more:
 
 ```sh
 docker build -f docker/Dockerfile -t open-documents .
+KEY=$(openssl rand -hex 24)   # keep it: every request sends it
 docker run --rm -p 3000:3000 \
-  -e OPENDOCS_API_KEYS="$(openssl rand -hex 24)" \
+  -e OPENDOCS_API_KEYS="$KEY" \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
   open-documents
 ```

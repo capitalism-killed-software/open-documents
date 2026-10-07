@@ -8,8 +8,14 @@ Node 24 or newer.
 
 ```sh
 npm ci
-npm run check   # lint, licence check, tests with coverage
+npm run check:portable   # lint, licence check, tests with coverage
 ```
+
+`check:portable` is what CI runs on every change. `npm run check` also counts the converters
+towards coverage, so it passes only with LibreOffice, Chromium, qpdf and the Python worker
+installed: LibreOffice from your package manager, Chromium with
+`npx playwright-core install chromium`, qpdf with `npm run fetch-binaries`, and the worker as in
+[docs/api.md](docs/api.md). Tests that need a missing tool are skipped.
 
 ## Rules
 

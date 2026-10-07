@@ -199,13 +199,19 @@ Docling (MIT) reads what a page is made of: headings, paragraphs, lists, tables 
 order, with a layout model and a table model. It runs in a small Python worker that ships with
 this package, started on first use and kept running.
 
-Set it up once (needs [uv](https://docs.astral.sh/uv/)). The models are about 500 MB:
+Set it up once (needs [uv](https://docs.astral.sh/uv/)). The models are about 500 MB. The worker
+is the `python/` folder inside the installed `@open-documents/node` package; in a project, that
+is `node_modules/@open-documents/node/python`:
 
 ```sh
 cd node_modules/@open-documents/node/python
 uv sync --frozen
 uv run docling-tools models download layout tableformer -o ~/.cache/open-documents/docling-models
 ```
+
+With `opendocs` installed globally, the folder is somewhere else: run any command that needs the
+worker, such as `opendocs to-markdown file.pdf`, and the error prints these commands with the
+right folder. Signing needs only `uv sync --frozen`, not the models.
 
 | Method | What it does |
 |---|---|

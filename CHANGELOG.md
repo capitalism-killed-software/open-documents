@@ -4,8 +4,9 @@
 
 - **@open-documents/ocr**, new: make scanned PDFs searchable and read words with their
   positions and confidence, with Tesseract in WebAssembly, in Node and the browser.
-- **Out of PDF:** Word and PowerPoint keeping each page's layout, with editable text (core);
-  Markdown, HTML, JSON and tables to Excel with Docling in a Python worker (node).
+- **Out of PDF:** Word and PowerPoint that look like each page, every line of text in a text box
+  you can edit (it does not flow from line to line) (core); Markdown, HTML, JSON and tables to
+  Excel with Docling in a Python worker (node).
 - **Forms:** read every field, fill them by name, add new ones (text, check box, dropdown, list,
   signature), flatten. Encryption is kept.
 - **Compare:** the words that changed between two versions and where they are, how much each
@@ -19,7 +20,17 @@
 - **Smaller files:** scans and photos scaled down and stored as JPEG or PNG.
 - **Overlay:** another PDF's pages over or under the pages: letterheads, backgrounds.
 - **Viewer:** a form designer, redaction, and form fields that no longer lose keystrokes when
-  typed into fast on a busy machine.
+  typed into fast on a busy machine. Open and Download buttons (`open`, `download`) and
+  `download()`. Encrypted files ask for their password on the page. A file that cannot be
+  fetched, or a `pdfium.wasm` that is not where `wasm-url` says, is shown on the page and
+  rejects `load()` instead of leaving it waiting. A prebuilt `dist/od-viewer.js` with
+  `pdfium.wasm` and the licences of the code inside, for pages without a bundler.
+- **opendocs:** `convert` refuses an output name that is not a PDF and names the command that goes
+  the other way (`to-docx` for `.docx`, and so on); before, it wrote the PDF under that name.
+  `split` and `render --pages` make the folder given with `-o`. `to-docx` and `to-pptx` take
+  `--dpi` and `--background`.
+- **Viewer example:** a small editor with every tool turned on, Download as Word, and drag and
+  drop, on port 5175 so it can run next to the browser example.
 - The server, client and `opendocs` command have all of the above. A larger Docker image
   (`docker/Dockerfile.full`) adds Docling and pyHanko.
 
