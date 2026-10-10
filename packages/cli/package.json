@@ -24,7 +24,8 @@
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=24"

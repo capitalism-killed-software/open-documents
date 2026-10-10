@@ -30,7 +30,8 @@
   "files": [
     "src",
     "types",
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "scripts": {
     "prepack": "node ../../tools/build-types.js viewer && node ../../tools/build-viewer-bundle.js"

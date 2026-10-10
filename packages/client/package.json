@@ -26,7 +26,8 @@
   },
   "files": [
     "src",
-    "types"
+    "types",
+    "NOTICE"
   ],
   "scripts": {
     "prepack": "node ../../tools/build-types.js client"

@@ -35,7 +35,8 @@
     "python/pyproject.toml",
     "python/uv.lock",
     "python/.python-version",
-    "python/src/open_documents_worker/*.py"
+    "python/src/open_documents_worker/*.py",
+    "NOTICE"
   ],
   "scripts": {
     "prepack": "node ../../tools/build-types.js node"
