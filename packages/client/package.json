@@ -40,7 +40,7 @@
     "provenance": true
   },
   "dependencies": {
-    "fflate": "0.8.2"
+    "fflate": "0.8.3"
   },
   "devDependencies": {
     "@open-documents/core": "0.1.1",
