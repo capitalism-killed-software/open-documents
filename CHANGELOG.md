@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - **@open-documents/ocr**, new: make scanned PDFs searchable and read words with their
   positions and confidence, with Tesseract in WebAssembly, in Node and the browser.
@@ -33,6 +33,8 @@
   drop, on port 5175 so it can run next to the browser example.
 - The server, client and `opendocs` command have all of the above. A larger Docker image
   (`docker/Dockerfile.full`) adds Docling and pyHanko.
+- Each package carries the licence and the NOTICE file.
+- Security fixes from fastify 5.12.7, markdown-it 14.3.3 and fflate 0.8.3.
 
 ## 0.1.1
 

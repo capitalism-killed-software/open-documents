@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/node",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Conversions that need other programs: Office documents, web pages, Markdown and email to PDF. Node only.",
   "keywords": [
     "pdf",
@@ -50,14 +50,14 @@
   },
   "dependencies": {
     "@kenjiuno/msgreader": "1.28.0",
-    "@open-documents/core": "0.1.1",
+    "@open-documents/core": "0.2.0",
     "markdown-it": "14.3.3",
     "playwright-core": "1.58.2",
     "postal-mime": "2.7.3"
   },
   "devDependencies": {
-    "@open-documents/fixtures": "0.1.1",
-    "@open-documents/ocr": "0.1.1",
+    "@open-documents/fixtures": "0.2.0",
+    "@open-documents/ocr": "0.2.0",
     "fflate": "0.8.3"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/server",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A self-hosted REST API for Open Documents: convert to PDF and change PDFs over HTTP.",
   "keywords": [
     "pdf",
@@ -47,13 +47,13 @@
   },
   "dependencies": {
     "@fastify/multipart": "9.4.0",
-    "@open-documents/core": "0.1.1",
-    "@open-documents/node": "0.1.1",
-    "@open-documents/ocr": "0.1.1",
+    "@open-documents/core": "0.2.0",
+    "@open-documents/node": "0.2.0",
+    "@open-documents/ocr": "0.2.0",
     "fastify": "5.12.7",
     "fflate": "0.8.3"
   },
   "devDependencies": {
-    "@open-documents/fixtures": "0.1.1"
+    "@open-documents/fixtures": "0.2.0"
   }
 }
