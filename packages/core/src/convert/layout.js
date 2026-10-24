@@ -108,6 +108,8 @@ export async function readLayout(input, options) {
 function readSegments(pdf, page, textPage, shown, rotation) {
   const { fn } = pdf;
   const PRECISION = 1000;
+  // scratch memory: colour at 0, flags at 8, font name from 16 (200 bytes), a matrix at MATRIX
+  const MATRIX = 224;
   const sizeX = Math.round(shown.width * PRECISION);
   const sizeY = Math.round(shown.height * PRECISION);
   const ptr = pdf.malloc(256);
@@ -129,7 +131,16 @@ function readSegments(pdf, page, textPage, shown, rotation) {
       fn.FPDFText_GetFillColor(textPage, g.index, ptr, ptr + 4, ptr + 8, ptr + 12);
       const color = [0, 4, 8].map((o) => (pdf.wasm.getValue(ptr + o, 'i32') & 0xff).toString(16).padStart(2, '0')).join('');
       const mode = fn.FPDFTextObj_GetTextRenderMode(fn.FPDFText_GetTextObject(textPage, g.index));
-      return { ...face, size: round(fn.FPDFText_GetFontSize(textPage, g.index)), color, invisible: mode === RENDER_INVISIBLE || mode === RENDER_CLIP };
+      // the font size in the content stream is before any scaling of the page or the text: a page
+      // drawn in 300-dpi units under a 0.24 scale sets 10-point text at 41.67. The character's
+      // matrix carries that scale; its vertical axis is the one that sizes the letters.
+      let scale = 1;
+      if (fn.FPDFText_GetMatrix(textPage, g.index, ptr + MATRIX)) {
+        const c = pdf.wasm.getValue(ptr + MATRIX + 8, 'float');
+        const d = pdf.wasm.getValue(ptr + MATRIX + 12, 'float');
+        scale = Math.hypot(c, d) || 1;
+      }
+      return { ...face, size: round(fn.FPDFText_GetFontSize(textPage, g.index) * scale), color, invisible: mode === RENDER_INVISIBLE || mode === RENDER_CLIP };
     };
 
     /** @type {Segment[]} */

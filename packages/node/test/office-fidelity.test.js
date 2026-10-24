@@ -2,7 +2,7 @@
 // back into a PDF, and see where every word landed. Needs LibreOffice; skipped without it.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument, docxDocument } from '@open-documents/fixtures';
+import { textDocument, docxDocument, scaledDocument } from '@open-documents/fixtures';
 import { toDocx, toPptx, extractWords, renderPage, inspect } from '@open-documents/core';
 import { createConverter, findLibreOffice } from '../src/index.js';
 
@@ -52,5 +52,15 @@ for (const [kind, convert] of /** @type {const} */ ([['docx', toDocx], ['pptx', 
     assert.deepEqual(far, []);
     const share = differing(await renderPage(pdf, { dpi: 60, format: 'rgba' }), await renderPage(back, { dpi: 60, format: 'rgba' }));
     assert.ok(share < 0.02, `${(share * 100).toFixed(2)}% of the pixels differ`);
+  });
+
+  test(`${kind}: a page drawn under a page-wide scale comes back the same size`, { skip }, async () => {
+    const { bytes } = await scaledDocument();
+    const back = await converter.toPdf(await convert(bytes), { filename: `out.${kind}` });
+    // Impress sets a long line a little wider than the PDF did: about 1.8 points by the end of a
+    // 64-character line at 10 points, scaled or not. Text sized wrongly would be far beyond this.
+    const limit = kind === 'pptx' ? 2 : 1.5;
+    const far = (await drift(bytes, back)).filter((w) => w.distance > limit);
+    assert.deepEqual(far, []);
   });
 }

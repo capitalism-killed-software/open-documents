@@ -192,6 +192,61 @@ export async function reportDocument() {
 }
 
 /**
+ * A one-page notice drawn the way many statement and letter generators draw: in 300-dpi units,
+ * under a page-wide scale of 0.24 (72/300). The text is set at 41.67, 58.33 and 33.33 units, so
+ * it shows at 10, 14 and 8 points. Lines from the top, with the size each shows at.
+ */
+export const SCALED_NOTICE = {
+  scale: 0.24,
+  lines: [
+    { text: 'Notice of a returned payment', size: 14, bold: true, x: 72, baseline: 96 },
+    { text: 'Your payment to the sample water company could not be made today.', size: 10, bold: false, x: 72, baseline: 132 },
+    { text: 'Sam Sample', size: 8, bold: false, x: 72, baseline: 170 },
+    { text: '100 Example Street', size: 8, bold: false, x: 72, baseline: 180 },
+    { text: 'Riverton XY 00000', size: 8, bold: false, x: 72, baseline: 190 },
+    { text: 'Check your balance before you pay.', size: 10, bold: false, x: 72, baseline: 232 },
+  ],
+};
+
+/**
+ * The notice in SCALED_NOTICE, with a ruled line under the heading.
+ *
+ * @returns {Promise<Fixture>}
+ */
+export async function scaledDocument() {
+  const doc = await PDFDocument.create();
+  setMetadata(doc, { ...DEFAULT_METADATA, title: 'Scaled notice' });
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const [width, height] = PAGE_SIZES.letter;
+  const { scale } = SCALED_NOTICE;
+  const page = doc.addPage([width, height]);
+  page.pushOperators(pushGraphicsState(), concatTransformationMatrix(scale, 0, 0, scale, 0, 0));
+  for (const line of SCALED_NOTICE.lines) {
+    page.drawText(line.text, {
+      x: line.x / scale,
+      y: (height - line.baseline) / scale,
+      size: Math.round((line.size / scale) * 100) / 100,
+      font: line.bold ? bold : regular,
+    });
+  }
+  const rule = (height - 104) / scale;
+  page.drawLine({ start: { x: 72 / scale, y: rule }, end: { x: 540 / scale, y: rule }, thickness: 0.8 / scale });
+  page.pushOperators(popGraphicsState());
+  const bytes = await doc.save({ useObjectStreams: false });
+  return {
+    bytes,
+    truth: {
+      metadata: { ...DEFAULT_METADATA, title: 'Scaled notice' },
+      pages: [{ width, height, rotation: 0, lines: SCALED_NOTICE.lines.map((l) => l.text) }],
+      bookmarks: [],
+      attachments: [],
+      encryption: null,
+    },
+  };
+}
+
+/**
  * A one-page form: a filled text field, a ticked check box, a dropdown and an empty field.
  *
  * @returns {Promise<Fixture & { fields: Record<string, string | boolean> }>}

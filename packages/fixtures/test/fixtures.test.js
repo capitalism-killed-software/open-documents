@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PDFDocument } from '@cantoo/pdf-lib';
-import { textDocument, formDocument, reportDocument, REPORT_TABLE } from '../src/index.js';
+import { PDFDocument, PDFArray, decodePDFRawStream } from '@cantoo/pdf-lib';
+import { strFromU8 } from 'fflate';
+import { textDocument, formDocument, reportDocument, REPORT_TABLE, scaledDocument, SCALED_NOTICE } from '../src/index.js';
 
 test('same options give the same bytes', async () => {
   const a = await textDocument({ pages: 2 });
@@ -105,4 +106,16 @@ test('the report has two pages, the same bytes every time, and its table in the 
   assert.equal((await PDFDocument.load(a.bytes)).getPageCount(), 2);
   assert.equal(a.truth.metadata.title, 'Quarterly Report');
   assert.deepEqual(a.truth.pages[0].lines.slice(-4), REPORT_TABLE.map((r) => r.join(' ')));
+});
+
+test('the scaled notice draws in 300-dpi units under a 0.24 scale, the same bytes every time', async () => {
+  const a = await scaledDocument();
+  assert.deepEqual(a.bytes, (await scaledDocument()).bytes);
+  const doc = await PDFDocument.load(a.bytes);
+  const contents = doc.getPage(0).node.Contents();
+  const streams = contents instanceof PDFArray ? contents.asArray().map((r) => doc.context.lookup(r)) : [contents];
+  const raw = streams.map((st) => strFromU8(decodePDFRawStream(/** @type {any} */ (st)).decode())).join('\n');
+  assert.match(raw, /0\.24 0 0 0\.24 0 0 cm/, 'the whole page is scaled');
+  assert.match(raw, /41\.6\d* Tf/, 'body text is set at 41.67 units, 10 points shown');
+  assert.deepEqual(a.truth.pages[0].lines, SCALED_NOTICE.lines.map((l) => l.text));
 });

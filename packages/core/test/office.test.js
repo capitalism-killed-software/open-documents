@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
 import { PDFDocument, StandardFonts, rgb, TextRenderingMode, setTextRenderingMode, pushGraphicsState, popGraphicsState } from '@cantoo/pdf-lib';
-import { textDocument, pngImage } from '@open-documents/fixtures';
+import { textDocument, pngImage, scaledDocument, SCALED_NOTICE } from '@open-documents/fixtures';
 import { toDocx, toPptx, merge } from '../src/index.js';
 import { fontFace } from '../src/convert/layout.js';
 
@@ -74,6 +74,24 @@ test('words far apart on one line stay in separate boxes, where they were', asyn
   assert.ok(xml.includes('>Name</w:t>') && xml.includes('>Amount</w:t>'), 'not joined into one line of text');
   const boxes = (xml.match(/<wps:wsp>/g) ?? []).length;
   assert.equal(boxes, 5);
+});
+
+test('text drawn under a page-wide scale keeps the size it shows at', async () => {
+  // statement and letter generators often draw in 300-dpi units under a 0.24 scale; the font
+  // size in the content is then 41.67 for 10-point text
+  const { bytes } = await scaledDocument();
+  /** @param {string} xml @param {string} text */
+  const runOf = (xml, text) => {
+    const at = xml.indexOf(`>${text}</`);
+    assert.ok(at > 0, `"${text}" is there`);
+    return xml.slice(Math.max(xml.lastIndexOf('<w:r>', at), xml.lastIndexOf('<a:r>', at)), at);
+  };
+  const word = files(await toDocx(bytes)).text('word/document.xml');
+  const slide = files(await toPptx(bytes)).text('ppt/slides/slide1.xml');
+  for (const line of SCALED_NOTICE.lines) {
+    assert.match(runOf(word, line.text), new RegExp(`<w:sz w:val="${line.size * 2}"/>`), `Word: "${line.text}" at ${line.size} pt`);
+    assert.match(runOf(slide, line.text), new RegExp(` sz="${line.size * 100}" `), `PowerPoint: "${line.text}" at ${line.size} pt`);
+  }
 });
 
 test('characters XML cannot hold as they are are escaped', async () => {
