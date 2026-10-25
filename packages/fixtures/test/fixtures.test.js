@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument, PDFArray, decodePDFRawStream } from '@cantoo/pdf-lib';
 import { strFromU8 } from 'fflate';
-import { textDocument, formDocument, reportDocument, REPORT_TABLE, scaledDocument, SCALED_NOTICE } from '../src/index.js';
+import { textDocument, formDocument, reportDocument, REPORT_TABLE, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT } from '../src/index.js';
 
 test('same options give the same bytes', async () => {
   const a = await textDocument({ pages: 2 });
@@ -118,4 +118,14 @@ test('the scaled notice draws in 300-dpi units under a 0.24 scale, the same byte
   assert.match(raw, /0\.24 0 0 0\.24 0 0 cm/, 'the whole page is scaled');
   assert.match(raw, /41\.6\d* Tf/, 'body text is set at 41.67 units, 10 points shown');
   assert.deepEqual(a.truth.pages[0].lines, SCALED_NOTICE.lines.map((l) => l.text));
+});
+
+test('the unlisted-font page names a font no computer has, the same bytes every time', async () => {
+  const a = await unlistedFontDocument();
+  assert.deepEqual(a.bytes, (await unlistedFontDocument()).bytes);
+  // byte for byte; written without object streams, so the font dictionary is plain text
+  const raw = Array.from(a.bytes, (b) => String.fromCharCode(b)).join('');
+  assert.match(raw, new RegExp(`/BaseFont /${UNLISTED_FONT}\\b`));
+  assert.doesNotMatch(raw, /\/BaseFont \/Helvetica/);
+  assert.equal(a.truth.pages[0].lines.length, 1);
 });

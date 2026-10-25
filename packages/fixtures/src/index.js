@@ -2,7 +2,7 @@
 // Output is deterministic: the same options always give the same bytes. The one exception is
 // encrypted files, where AES needs a fresh random IV for every string and stream.
 
-import { PDFDocument, PDFName, PDFString, StandardFonts, degrees, pushGraphicsState, popGraphicsState, concatTransformationMatrix } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFDict, PDFName, PDFString, StandardFonts, degrees, pushGraphicsState, popGraphicsState, concatTransformationMatrix } from '@cantoo/pdf-lib';
 
 export const FIXED_DATE = new Date('2020-01-01T00:00:00Z');
 
@@ -243,6 +243,33 @@ export async function scaledDocument() {
       attachments: [],
       encryption: null,
     },
+  };
+}
+
+/** The font in unlistedFontDocument(): a family no computer has. */
+export const UNLISTED_FONT = 'Unlisted_Sample_Face';
+
+/**
+ * One line of text in a font no computer has, the way statement and letter generators often name
+ * their own fonts. It is Helvetica under another name, so readers draw it with a stand-in, and
+ * office files made from it name a family that is installed nowhere.
+ *
+ * @returns {Promise<Fixture>}
+ */
+export async function unlistedFontDocument() {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage(PAGE_SIZES.letter);
+  const line = 'This line is set in a font that is not installed anywhere.';
+  page.drawText(line, { x: 72, y: 700, size: 12, font });
+  setMetadata(doc, DEFAULT_METADATA);
+  // the font dictionary is written when the document is flushed; rename it after that
+  await doc.flush();
+  doc.context.lookup(font.ref, PDFDict).set(PDFName.of('BaseFont'), PDFName.of(UNLISTED_FONT));
+  const bytes = await doc.save({ useObjectStreams: false });
+  return {
+    bytes,
+    truth: { pages: [{ width: 612, height: 792, rotation: 0, lines: [line] }], metadata: DEFAULT_METADATA, bookmarks: [], attachments: [], encryption: null },
   };
 }
 

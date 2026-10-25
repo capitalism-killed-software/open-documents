@@ -2,7 +2,7 @@
 // back into a PDF, and see where every word landed. Needs LibreOffice; skipped without it.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument, docxDocument, scaledDocument } from '@open-documents/fixtures';
+import { textDocument, docxDocument, scaledDocument, unlistedFontDocument } from '@open-documents/fixtures';
 import { toDocx, toPptx, extractWords, renderPage, inspect } from '@open-documents/core';
 import { createConverter, findLibreOffice } from '../src/index.js';
 
@@ -27,6 +27,17 @@ async function drift(a, b) {
     const near = after[p].words.filter((v) => v.text === w.text).map((v) => Math.hypot(v.x - w.x, v.y - w.y));
     return { text: w.text, page: p + 1, distance: near.length ? Math.min(...near) : Infinity };
   })).flat();
+}
+
+/**
+ * The fonts a PDF from LibreOffice draws with, without the subset prefix. LibreOffice writes its
+ * font dictionaries as plain text.
+ *
+ * @param {Uint8Array} pdf
+ */
+function fontsIn(pdf) {
+  const raw = Array.from(pdf, (b) => String.fromCharCode(b)).join('');
+  return [...new Set([...raw.matchAll(/\/BaseFont\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/g)].map((m) => m[1]))];
 }
 
 /** @param {{ data: Uint8Array, width: number, height: number }} a @param {{ data: Uint8Array }} b */
@@ -62,5 +73,13 @@ for (const [kind, convert] of /** @type {const} */ ([['docx', toDocx], ['pptx', 
     const limit = kind === 'pptx' ? 2 : 1.5;
     const far = (await drift(bytes, back)).filter((w) => w.distance > limit);
     assert.deepEqual(far, []);
+  });
+
+  test(`${kind}: text in a font no one has comes back in a sans face, not a serif one`, { skip }, async () => {
+    const { bytes } = await unlistedFontDocument();
+    const back = await converter.toPdf(await convert(bytes), { filename: `out.${kind}` });
+    const fonts = fontsIn(back);
+    assert.ok(fonts.length > 0, 'the fonts were found');
+    assert.deepEqual(fonts.filter((f) => /serif/i.test(f) && !/sans/i.test(f)), [], `drawn with ${fonts.join(', ')}`);
   });
 }

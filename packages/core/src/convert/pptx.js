@@ -90,6 +90,12 @@ export async function toPptx(input, options = {}) {
   });
 }
 
+// What kind of font each run is, for readers that lack the family: the family in the high four
+// bits (1 serif, 2 sans, 3 fixed width), the pitch in the low four (1 fixed, 2 variable).
+// Impress shows a family it lacks in a sans face unless told it is fixed width; it ignores the
+// serif hint, so unknown serif fonts still come out sans there. PowerPoint uses all three.
+const PITCH_FAMILY = { sans: 0x22, serif: 0x12, mono: 0x31 };
+
 /**
  * @param {number} id
  * @param {import('./layout.js').Segment} segment
@@ -114,7 +120,7 @@ function textBox(id, segment, scale, ox, oy) {
     const font = xml(run.font);
     const sz = Math.min(400000, Math.max(100, Math.round(run.size * scale * 100)));
     return `<a:r><a:rPr lang="en-US" sz="${sz}" b="${run.bold ? 1 : 0}" i="${run.italic ? 1 : 0}" dirty="0">`
-      + `<a:solidFill><a:srgbClr val="${run.color}"/></a:solidFill><a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/></a:rPr>`
+      + `<a:solidFill><a:srgbClr val="${run.color}"/></a:solidFill>${['latin', 'ea', 'cs'].map((t) => `<a:${t} typeface="${font}" pitchFamily="${PITCH_FAMILY[run.kind]}"/>`).join('')}</a:rPr>`
       + `<a:t>${xml(run.text)}</a:t></a:r>`;
   }).join('');
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>`

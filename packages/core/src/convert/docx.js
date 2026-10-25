@@ -11,6 +11,8 @@ const LINE = 1.2;
 const ASCENT = 0.96;
 // Word refuses pages over 22 inches; bigger pages are scaled to fit.
 const MAX_POINTS = 22 * 72;
+// How the font table describes each kind of font, for readers that lack the family.
+const FAMILY = { sans: 'swiss', serif: 'roman', mono: 'modern' };
 
 const NS = {
   w: 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -67,6 +69,7 @@ export async function toDocx(input, options = {}) {
       + '<Default Extension="png" ContentType="image/png"/>'
       + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
       + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+      + '<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>'
       + '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
       + '</Types>',
     '_rels/.rels': `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
@@ -80,11 +83,33 @@ export async function toDocx(input, options = {}) {
       + '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault>'
       + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:pPrDefault>'
       + '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>',
+    'word/fontTable.xml': fontTable(pages),
     'word/_rels/document.xml.rels': `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
       + '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      + '<Relationship Id="rIdFonts" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>'
       + `${rels.join('')}</Relationships>`,
     ...media,
   });
+}
+
+/**
+ * Every family the text uses, with what kind of font it is. A reader that lacks a family shows a
+ * font of the same kind: without this, LibreOffice shows any family it does not know in a serif
+ * face, so a statement set in its maker's own sans comes out looking like a book.
+ *
+ * @param {import('./layout.js').PageLayout[]} pages
+ */
+function fontTable(pages) {
+  /** @type {Map<string, import('./layout.js').FontKind>} */
+  const kinds = new Map();
+  for (const page of pages) {
+    for (const segment of page.segments) {
+      for (const run of segment.runs) if (!kinds.has(run.font)) kinds.set(run.font, run.kind);
+    }
+  }
+  const fonts = [...kinds].map(([font, kind]) => `<w:font w:name="${xml(font)}"><w:family w:val="${FAMILY[kind]}"/>`
+    + `<w:pitch w:val="${kind === 'mono' ? 'fixed' : 'variable'}"/></w:font>`);
+  return `${XML_HEAD}<w:fonts xmlns:w="${NS.w}">${fonts.join('')}</w:fonts>`;
 }
 
 /**

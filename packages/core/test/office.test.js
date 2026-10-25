@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
 import { PDFDocument, StandardFonts, rgb, TextRenderingMode, setTextRenderingMode, pushGraphicsState, popGraphicsState } from '@cantoo/pdf-lib';
-import { textDocument, pngImage, scaledDocument, SCALED_NOTICE } from '@open-documents/fixtures';
+import { textDocument, pngImage, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT } from '@open-documents/fixtures';
 import { toDocx, toPptx, merge } from '../src/index.js';
 import { fontFace } from '../src/convert/layout.js';
 
@@ -153,11 +153,48 @@ test('pptx: turned text runs down its slide', async () => {
 });
 
 test('font names from PDFs become the families office suites know', () => {
-  assert.deepEqual(fontFace('ABCDEF+Calibri-BoldItalic', -1, 0), { font: 'Calibri', bold: true, italic: true });
-  assert.deepEqual(fontFace('TimesNewRomanPSMT', 400, 0), { font: 'Times New Roman', bold: false, italic: false });
-  assert.deepEqual(fontFace('SourceSansPro-Regular', 400, 0), { font: 'Source Sans Pro', bold: false, italic: false });
-  assert.deepEqual(fontFace('GaramondPremrPro', 700, 0x40), { font: 'Garamond Premr Pro', bold: true, italic: true });
-  assert.deepEqual(fontFace('', -1, 0), { font: 'Arial', bold: false, italic: false });
+  assert.deepEqual(fontFace('ABCDEF+Calibri-BoldItalic', -1, 0), { font: 'Calibri', bold: true, italic: true, kind: 'sans' });
+  assert.deepEqual(fontFace('TimesNewRomanPSMT', 400, 0), { font: 'Times New Roman', bold: false, italic: false, kind: 'serif' });
+  assert.deepEqual(fontFace('SourceSansPro-Regular', 400, 0), { font: 'Source Sans Pro', bold: false, italic: false, kind: 'sans' });
+  assert.deepEqual(fontFace('GaramondPremrPro', 700, 0x40), { font: 'Garamond Premr Pro', bold: true, italic: true, kind: 'serif' });
+  assert.deepEqual(fontFace('', -1, 0), { font: 'Arial', bold: false, italic: false, kind: 'sans' });
+});
+
+test('a font no one has is called sans, serif or fixed width, from its flags, then its name', () => {
+  // descriptor flags: 1 fixed width, 2 serif, 0x20 not symbolic (says nothing about the look)
+  assert.equal(fontFace('Unlisted_Sample_Face', 400, 0).kind, 'sans');
+  assert.equal(fontFace('Unlisted_Sample_Face', 400, 0x20).kind, 'sans');
+  assert.equal(fontFace('Unlisted_Sample_Face', 400, 0x22).kind, 'serif');
+  assert.equal(fontFace('Unlisted_Sample_Face', 400, 0x21).kind, 'mono');
+  assert.equal(fontFace('ABCDEF+SourceCodePro-Regular', 400, 0).kind, 'mono');
+  assert.equal(fontFace('PTSerif-Bold', 700, 0).kind, 'serif');
+  assert.equal(fontFace('Georgia', 400, 0).kind, 'serif');
+  assert.equal(fontFace('MicrosoftSansSerif', 400, 0).kind, 'sans');
+  assert.equal(fontFace('Helvetica', 400, 0x22).kind, 'sans', 'a family we know keeps its own kind');
+});
+
+test('Word and PowerPoint say what kind each font is, for readers that lack it', async () => {
+  const bytes = await styled();
+  const word = files(await toDocx(bytes));
+  const table = word.text('word/fontTable.xml');
+  assert.match(table, /<w:font w:name="Arial"><w:family w:val="swiss"\/><w:pitch w:val="variable"\/><\/w:font>/);
+  assert.match(table, /<w:font w:name="Times New Roman"><w:family w:val="roman"\/><w:pitch w:val="variable"\/><\/w:font>/);
+  assert.match(table, /<w:font w:name="Courier New"><w:family w:val="modern"\/><w:pitch w:val="fixed"\/><\/w:font>/);
+  assert.equal(table.match(/<w:font /g)?.length, 3, 'each family once');
+  assert.match(word.text('word/_rels/document.xml.rels'), /relationships\/fontTable" Target="fontTable\.xml"/);
+  assert.match(word.text('[Content_Types].xml'), /PartName="\/word\/fontTable\.xml" ContentType="[^"]+fontTable\+xml"/);
+
+  const slide = files(await toPptx(bytes)).text('ppt/slides/slide1.xml');
+  assert.match(slide, /<a:latin typeface="Arial" pitchFamily="34"\/>/);
+  assert.match(slide, /<a:latin typeface="Times New Roman" pitchFamily="18"\/>/);
+  assert.match(slide, /<a:latin typeface="Courier New" pitchFamily="49"\/>/);
+});
+
+test('a font no one has keeps its name, and Word is told it is a sans', async () => {
+  const { bytes } = await unlistedFontDocument();
+  const word = files(await toDocx(bytes));
+  assert.match(word.text('word/document.xml'), new RegExp(`w:ascii="${UNLISTED_FONT}"`));
+  assert.match(word.text('word/fontTable.xml'), new RegExp(`<w:font w:name="${UNLISTED_FONT}"><w:family w:val="swiss"/>`));
 });
 
 test('bad options are refused', async () => {

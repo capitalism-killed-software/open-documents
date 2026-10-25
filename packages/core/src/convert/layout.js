@@ -14,8 +14,12 @@ const PAGEOBJ_TEXT = 1;
 const PAGEOBJ_FORM = 5;
 const RENDER_INVISIBLE = 3;
 const RENDER_CLIP = 7;
+const FIXED_PITCH_FLAG = 0x1;
+const SERIF_FLAG = 0x2;
 const ITALIC_FLAG = 0x40;
 const WHITE = 0xffffffff;
+
+/** @typedef {'sans' | 'serif' | 'mono'} FontKind */
 
 /**
  * A stretch of text in one style.
@@ -23,6 +27,7 @@ const WHITE = 0xffffffff;
  * @typedef {object} Run
  * @property {string} text
  * @property {string} font   family name, e.g. "Arial"
+ * @property {FontKind} kind  what a reader that lacks the family should show it in
  * @property {boolean} bold
  * @property {boolean} italic
  * @property {number} size   points
@@ -206,7 +211,7 @@ function segmentOf(words, toShown) {
       if (last && last.font === style.font && last.bold === style.bold && last.italic === style.italic && last.size === style.size && last.color === style.color) {
         last.text += text;
       } else {
-        runs.push({ text, font: style.font, bold: style.bold, italic: style.italic, size: style.size, color: style.color });
+        runs.push({ text, font: style.font, kind: style.kind, bold: style.bold, italic: style.italic, size: style.size, color: style.color });
       }
     });
   });
@@ -261,20 +266,24 @@ function removeText(pdf, holder, form) {
 }
 
 // Names PDFs use for fonts every office suite has under another name.
+/** @type {[RegExp, string, FontKind][]} */
 const FAMILIES = [
-  [/^(Helvetica|Arial|ArialMT|Arimo|LiberationSans|NimbusSans)/i, 'Arial'],
-  [/^(Times|TimesNewRoman|Tinos|LiberationSerif|NimbusRom)/i, 'Times New Roman'],
-  [/^(Courier|CourierNew|Cousine|LiberationMono|NimbusMono)/i, 'Courier New'],
-  [/^(Calibri|Carlito)/i, 'Calibri'],
-  [/^(Cambria|Caladea)/i, 'Cambria'],
+  [/^(Helvetica|Arial|ArialMT|Arimo|LiberationSans|NimbusSans)/i, 'Arial', 'sans'],
+  [/^(Times|TimesNewRoman|Tinos|LiberationSerif|NimbusRom)/i, 'Times New Roman', 'serif'],
+  [/^(Courier|CourierNew|Cousine|LiberationMono|NimbusMono)/i, 'Courier New', 'mono'],
+  [/^(Calibri|Carlito)/i, 'Calibri', 'sans'],
+  [/^(Cambria|Caladea)/i, 'Cambria', 'serif'],
 ];
 
 /**
- * The family, weight and slant from a PDF font name like "ABCDEF+Calibri-BoldItalic".
+ * The family, weight and slant from a PDF font name like "ABCDEF+Calibri-BoldItalic", and the
+ * kind of font it is. Office suites show a family they lack in a like font when told its kind;
+ * LibreOffice otherwise picks a serif face, whatever the text looked like.
  *
  * @param {string} name
  * @param {number} weight  -1 when PDFium does not know
  * @param {number} flags   the font descriptor flags
+ * @returns {{ font: string, bold: boolean, italic: boolean, kind: FontKind }}
  */
 export function fontFace(name, weight, flags) {
   const plain = name.replace(/^[A-Z]{6}\+/, '');
@@ -282,14 +291,20 @@ export function fontFace(name, weight, flags) {
   const words = `${base} ${style}`;
   const bold = weight >= 600 || /bold|black|heavy|semibold|demi/i.test(words);
   const italic = (flags & ITALIC_FLAG) !== 0 || /italic|oblique/i.test(words);
-  const known = FAMILIES.find(([pattern]) => /** @type {RegExp} */ (pattern).test(base));
-  if (known) return { font: /** @type {string} */ (known[1]), bold, italic };
+  const known = FAMILIES.find(([pattern]) => pattern.test(base));
+  if (known) return { font: known[1], bold, italic, kind: known[2] };
+  // the descriptor flags first; many fonts leave them unset, so then the name, and then sans,
+  // which is what most documents made today are set in
+  /** @type {FontKind} */
+  const kind = flags & FIXED_PITCH_FLAG || /mono|code|consol/i.test(base) ? 'mono'
+    : flags & SERIF_FLAG || (/serif|garamond|georgia|minion|caslon|baskerville|palatino|bookman/i.test(base) && !/sans/i.test(base)) ? 'serif'
+      : 'sans';
   const family = base
     .replace(/(PSMT|MT|PS)$/, '')
     .replace(/(Bold|Italic|Oblique|Regular)+$/i, '')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .trim();
-  return { font: family || 'Arial', bold, italic };
+  return { font: family || 'Arial', bold, italic, kind };
 }
 
 /** @param {number} n */
