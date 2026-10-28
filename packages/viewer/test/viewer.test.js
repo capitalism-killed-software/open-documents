@@ -281,6 +281,67 @@ test('annotate: draw with the pen, add a note, undo it, save', { skip }, async (
   }
 });
 
+test('annotate: a text box grows to hold what is typed, and the saved file shows all of it', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    await page.evaluate(() => /** @type {any} */ (document.getElementById('v')).setAttribute('annotate', 'true'));
+    await inViewer(page, 'button[data-tool="freeText"]').waitFor();
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    const zoom = await page.evaluate(() => {
+      const el = /** @type {HTMLElement} */ (document.getElementById('v')?.shadowRoot?.querySelector('.page[data-page="1"]'));
+      return el.getBoundingClientRect().width / 612;
+    });
+    const at = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    await inViewer(page, 'button[data-tool="freeText"]').click();
+    await page.mouse.click(at.x + 200 * zoom, at.y + 300 * zoom);
+    await page.waitForFunction((list) => list.some((c) => c.type === 'create'), changes);
+    // the new box opens for typing, its placeholder selected
+    const sentence = 'Checked against the second copy on site, with two small changes noted for the next visit.';
+    await page.keyboard.type(sentence);
+    // turning the tool off ends the typing
+    await inViewer(page, 'button[data-tool="freeText"]').click();
+    await page.waitForFunction((list) => list.filter((c) => c.type === 'update').length >= 2, changes, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    const saved = await savedFrom(page);
+
+    const { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, StandardFonts } = await import('@cantoo/pdf-lib');
+    const doc = await PDFDocument.load(saved);
+    const annots = doc.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray);
+    const free = annots.asArray().map((r) => doc.context.lookup(r, PDFDict)).find((d) => String(d.get(PDFName.of('Subtype'))) === '/FreeText');
+    assert.ok(free, 'the text box is saved');
+    assert.equal(/** @type {any} */ (free.lookup(PDFName.of('Contents'))).decodeText(), sentence);
+    const [x1, y1, x2, y2] = free.lookup(PDFName.of('Rect'), PDFArray).asArray().map((n) => /** @type {any} */ (n instanceof PDFNumber ? n : null).asNumber());
+    const [width, height] = [x2 - x1, y2 - y1];
+    const helvetica = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    // at least this many lines of 14-point text, however the words wrap
+    const lines = Math.ceil(helvetica.widthOfTextAtSize(sentence, 14) / width);
+    assert.ok(height >= lines * 14 * 1.1, `${lines} lines of 14-point text in ${width.toFixed(0)} × ${height.toFixed(0)} points`);
+
+    // the saved appearance draws every line: separate bands of the box's red ink, one per line
+    const { renderPage } = await import('@open-documents/core');
+    const shot = await renderPage(saved, { page: 1, dpi: 72, format: 'rgba' });
+    let bands = 0;
+    let inBand = false;
+    for (let y = Math.floor(792 - y2); y < Math.ceil(792 - y1); y++) {
+      let red = false;
+      for (let x = Math.floor(x1); x < Math.ceil(x2) && !red; x++) {
+        const i = (y * shot.width + x) * 4;
+        red = shot.data[i] > 170 && shot.data[i + 1] < 130 && shot.data[i + 2] < 130;
+      }
+      if (red && !inBand) bands++;
+      inBand = red;
+    }
+    assert.ok(bands >= lines, `${bands} lines drawn, ${lines} needed`);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 /** @param {import('playwright-core').Page} page */
 const savedFrom = async (page) => new Uint8Array(await page.evaluate(async () => Array.from(await /** @type {any} */ (document.getElementById('v')).save())));
 

@@ -32,8 +32,9 @@ import { LockModeType } from '@embedpdf/plugin-annotation';
 import { useCapability } from '@embedpdf/core/preact';
 import { serializeFormWrites } from './form-writes.js';
 import { FormPluginPackage } from '@embedpdf/plugin-form/preact';
-import { PdfAnnotationSubtype } from '@embedpdf/models';
+import { PdfAnnotationSubtype, standardFontCssProperties } from '@embedpdf/models';
 import { fontConfig } from './fonts.js';
+import { fitTextBox } from './text-box.js';
 
 const html = htm.bind(h);
 
@@ -101,6 +102,9 @@ export function App({ wasmUrl, fontsUrl, toolbar, sidebar, annotate, organize, d
       annotationAuthor: author,
       deactivateToolAfterCreate: false,
       selectAfterCreate: false,
+      // a click with the Text tool makes a box this size, centred on the click; it grows to fit
+      // what is typed (growTextBox)
+      tools: [{ id: 'freeText', clickBehavior: { defaultSize: { width: 220, height: 22 } } }],
       // form fields are for filling in, not for moving about: locking them sends clicks to the field
       locked: { type: LockModeType.Include, categories: ['form'] },
     }),
@@ -277,6 +281,9 @@ function AnnotationTools({ documentId }) {
 /** Tells the element when annotations and form fields change. @param {{ documentId: string, controller: Controller }} props */
 function Changes({ documentId, controller }) {
   const annotation = useAnnotation(documentId);
+  // text boxes just typed into, waiting for their text to be written; kept across the
+  // subscriptions below, which start again whenever the capability changes
+  const typed = useRef(/** @type {Set<string>} */ (new Set())).current;
   const { provides: forms } = useCapability('form');
   useEffect(() => {
     const scope = /** @type {any} */ (forms)?.forDocument?.(documentId);
@@ -290,6 +297,17 @@ function Changes({ documentId, controller }) {
     const scope = /** @type {any} */ (annotation.provides);
     if (!scope?.onAnnotationEvent) return undefined;
     return scope.onAnnotationEvent((/** @type {any} */ e) => {
+      // typing into a text box changes its contents only; moving or sizing it by hand changes
+      // its rect, and is left alone
+      if (e.type === 'update' && e.committed === false && typeof e.patch?.contents === 'string' && !('rect' in e.patch)) {
+        typed.add(e.annotation?.id);
+      }
+      // a change EmbedPDF is told about while it still writes the last one is marked written and
+      // lost, so the box grows only once its new text is in the file
+      if (e.type === 'update' && e.committed !== false && typed.delete(e.annotation?.id)) {
+        const { id, pageIndex } = e.annotation;
+        setTimeout(() => growTextBox(scope, controller.registry, documentId, id, pageIndex));
+      }
       // EmbedPDF reports a new annotation twice, before and after it is written into the PDF
       if (e.committed === false) return;
       if (e.type === 'create' || e.type === 'update' || e.type === 'delete') {
@@ -303,6 +321,34 @@ function Changes({ documentId, controller }) {
     });
   }, [annotation.provides]);
   return null;
+}
+
+/** @type {CanvasRenderingContext2D | null} */
+let measuring = null;
+
+/**
+ * Grow a text box to hold its text, once it is typed. A box on a turned page, or turned itself,
+ * is left as it is.
+ *
+ * @param {any} scope  the annotation capability for the document
+ * @param {any} registry
+ * @param {string} documentId
+ * @param {string} id
+ * @param {number} pageIndex
+ */
+function growTextBox(scope, registry, documentId, id, pageIndex) {
+  const box = scope.getAnnotationById?.(id)?.object;
+  if (!box || box.type !== PdfAnnotationSubtype.FREETEXT || box.intent === 'FreeTextCallout' || box.rotation) return;
+  const page = registry?.getStore?.().getState?.().core?.documents?.[documentId]?.document?.pages?.[pageIndex];
+  if (!page || page.rotation) return;
+  measuring ??= document.createElement('canvas').getContext('2d');
+  if (!measuring) return;
+  const css = standardFontCssProperties(box.fontFamily);
+  measuring.font = `${css.fontStyle} ${css.fontWeight} ${box.fontSize ?? 12}px ${css.fontFamily}`;
+  const ctx = measuring;
+  // the browser's stand-in for the PDF font is rarely the same width: leave a little over
+  const rect = fitTextBox(box, page.size, (text) => ctx.measureText(text).width * 1.05);
+  if (rect) scope.updateAnnotation(pageIndex, id, { rect });
 }
 
 /** @param {{ documentId: string, organize: boolean, controller: Controller }} props */
