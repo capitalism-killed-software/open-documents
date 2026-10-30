@@ -9,8 +9,8 @@ import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { chromium } from 'playwright-core';
-import { textDocument } from '@open-documents/fixtures';
-import { inspect } from '@open-documents/core';
+import { textDocument, scaledDocument } from '@open-documents/fixtures';
+import { inspect, extractWords } from '@open-documents/core';
 
 const entry = fileURLToPath(new URL('../src/index.js', import.meta.url));
 let dir = '';
@@ -34,6 +34,7 @@ before(async () => {
   const lines = (/** @type {number} */ n) => Array.from({ length: 30 }, (_, i) => `Page ${n} line ${i + 1}`);
   await writeFile(join(dir, 'five.pdf'), (await textDocument({ pages: 5, lines })).bytes);
   await writeFile(join(dir, 'locked.pdf'), (await textDocument({ pages: 2, encrypt: { userPassword: 'open' } })).bytes);
+  await writeFile(join(dir, 'scaled.pdf'), (await scaledDocument()).bytes);
   await writeFile(join(dir, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,">
     <script type="module" src="./viewer.js"></script></head><body>
     <od-viewer id="v" wasm-url="./pdfium.wasm" style="--od-height: 640px; width: 820px"></od-viewer>
@@ -336,6 +337,63 @@ test('annotate: a text box grows to hold what is typed, and the saved file shows
       inBand = red;
     }
     assert.ok(bands >= lines, `${bands} lines drawn, ${lines} needed`);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('annotate: a highlight on a page drawn under a page-wide scale covers its words', { skip }, async () => {
+  const { page, errors } = await open();
+  try {
+    await page.evaluate(async () => {
+      const v = /** @type {any} */ (document.getElementById('v'));
+      v.setAttribute('annotate', 'true');
+      await v.load('./scaled.pdf');
+    });
+    await inViewer(page, 'button[data-tool="highlight"]').waitFor();
+    await page.waitForFunction(() => /** @type {any} */ (document.getElementById('v')).shadowRoot.querySelectorAll('.page img').length > 0);
+    const changes = await page.evaluateHandle(() => {
+      const list = /** @type {any[]} */ ([]);
+      document.getElementById('v')?.addEventListener('od-change', (/** @type {any} */ e) => list.push(e.detail));
+      return list;
+    });
+    const zoom = await page.evaluate(() => {
+      const el = /** @type {HTMLElement} */ (document.getElementById('v')?.shadowRoot?.querySelector('.page[data-page="1"]'));
+      return el.getBoundingClientRect().width / 612;
+    });
+    const at = /** @type {{ x: number, y: number }} */ (await inViewer(page, '.page[data-page="1"]').boundingBox());
+    // the line under the heading: 10 points shown, drawn at 41.67 under a 0.24 scale
+    const [{ words: all }] = await extractWords((await scaledDocument()).bytes);
+    const words = all.filter((w) => w.y > 118 && w.y < 130);
+    assert.equal(words.map((w) => w.text).join(' '), 'Your payment to the sample water company could not be made today.');
+    const first = words[0];
+    const last = /** @type {typeof first} */ (words.at(-1));
+    const middle = first.y + first.height / 2;
+    await inViewer(page, 'button[data-tool="highlight"]').click();
+    await page.mouse.move(at.x + (first.x + 1) * zoom, at.y + middle * zoom);
+    await page.mouse.down();
+    // a little past the end, so the full stop is taken too
+    await page.mouse.move(at.x + (last.x + last.width + 4) * zoom, at.y + middle * zoom, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForFunction((list) => list.some((c) => c.type === 'create'), changes);
+    const saved = await savedFrom(page);
+
+    const { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber } = await import('@cantoo/pdf-lib');
+    const doc = await PDFDocument.load(saved);
+    const annots = doc.getPage(0).node.lookup(PDFName.of('Annots'), PDFArray);
+    const mark = annots.asArray().map((r) => doc.context.lookup(r, PDFDict)).find((d) => String(d.get(PDFName.of('Subtype'))) === '/Highlight');
+    assert.ok(mark, 'the highlight is saved');
+    const quad = mark.lookup(PDFName.of('QuadPoints'), PDFArray).asArray().map((n) => /** @type {any} */ (n instanceof PDFNumber ? n : null).asNumber());
+    // quads are in PDF space, y up: turn them to points from the top, like the words
+    const xs = quad.filter((_, i) => i % 2 === 0);
+    const ys = quad.filter((_, i) => i % 2 === 1).map((y) => 792 - y);
+    const marked = { top: Math.min(...ys), bottom: Math.max(...ys), left: Math.min(...xs), right: Math.max(...xs) };
+    const text = { top: Math.min(...words.map((w) => w.y)), bottom: Math.max(...words.map((w) => w.y + w.height)), left: first.x, right: last.x + last.width };
+    const shown = JSON.stringify({ marked, text }, (_, v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : v));
+    assert.ok(Math.abs((marked.top + marked.bottom) / 2 - (text.top + text.bottom) / 2) < 2, `centred on the line: ${shown}`);
+    assert.ok(marked.top <= text.top + 1 && marked.bottom >= text.bottom - 1, `covers the letters top to bottom: ${shown}`);
+    assert.ok(marked.left <= text.left + 1 && marked.right >= text.right - 1, `covers the line end to end: ${shown}`);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
