@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read, render and change PDF files in the browser and in Node.",
   "keywords": [
     "pdf",
@@ -56,6 +56,6 @@
     "fflate": "0.8.3"
   },
   "devDependencies": {
-    "@open-documents/fixtures": "0.2.0"
+    "@open-documents/fixtures": "0.2.1"
   }
 }

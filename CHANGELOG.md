@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+- **PDF to Word and PowerPoint:** text on pages drawn at a scale, as many statements and letters
+  are, came out about four times too big. It now keeps the size it shows at.
+- **PDF to Word and PowerPoint:** a font nobody has installed is marked as sans, serif or fixed
+  width, so Word and LibreOffice show a similar font instead of a serif one. (LibreOffice
+  Impress still shows a missing serif font in a sans face.)
+- **Viewer:** a text box made with a click starts wider and grows to hold everything typed into
+  it, on the page and in the saved file. Before, only its first line showed.
+
 ## 0.2.0
 
 - **@open-documents/ocr**, new: make scanned PDFs searchable and read words with their

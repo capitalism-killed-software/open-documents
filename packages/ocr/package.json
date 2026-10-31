@@ -1,6 +1,6 @@
 {
   "name": "@open-documents/ocr",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Make scanned PDFs searchable and read words off page images, in Node or the browser, with Tesseract compiled to WebAssembly.",
   "keywords": [
     "pdf",
@@ -48,10 +48,10 @@
     "provenance": true
   },
   "devDependencies": {
-    "@open-documents/fixtures": "0.2.0"
+    "@open-documents/fixtures": "0.2.1"
   },
   "dependencies": {
-    "@open-documents/core": "0.2.0",
+    "@open-documents/core": "0.2.1",
     "@tesseract.js-data/eng": "1.0.0",
     "tesseract.js": "7.0.0"
   }
