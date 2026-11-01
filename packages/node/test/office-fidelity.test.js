@@ -68,9 +68,10 @@ for (const [kind, convert] of /** @type {const} */ ([['docx', toDocx], ['pptx', 
   test(`${kind}: a page drawn under a page-wide scale comes back the same size`, { skip }, async () => {
     const { bytes } = await scaledDocument();
     const back = await converter.toPdf(await convert(bytes), { filename: `out.${kind}` });
-    // Impress sets a long line a little wider than the PDF did: about 1.8 points by the end of a
-    // 64-character line at 10 points, scaled or not. Text sized wrongly would be far beyond this.
-    const limit = kind === 'pptx' ? 2 : 1.5;
+    // Impress sets a long line a little wider than the PDF did, scaled or not: by the end of a
+    // 64-character line at 10 points, about 1.8 points in LibreOffice 26.2 and 2.1 in 24.2. Text
+    // sized wrongly lands tens of points away.
+    const limit = kind === 'pptx' ? 3 : 1.5;
     const far = (await drift(bytes, back)).filter((w) => w.distance > limit);
     assert.deepEqual(far, []);
   });
