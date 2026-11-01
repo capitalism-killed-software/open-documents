@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument, PDFArray, decodePDFRawStream } from '@cantoo/pdf-lib';
 import { strFromU8 } from 'fflate';
-import { textDocument, formDocument, reportDocument, REPORT_TABLE, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT } from '../src/index.js';
+import { textDocument, formDocument, reportDocument, REPORT_TABLE, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT, flowDocument } from '../src/index.js';
 
 test('same options give the same bytes', async () => {
   const a = await textDocument({ pages: 2 });
@@ -128,4 +128,26 @@ test('the unlisted-font page names a font no computer has, the same bytes every 
   assert.match(raw, new RegExp(`/BaseFont /${UNLISTED_FONT}\\b`));
   assert.doesNotMatch(raw, /\/BaseFont \/Helvetica/);
   assert.equal(a.truth.pages[0].lines.length, 1);
+});
+
+test('the tenancy agreement wraps its own words, breaks one with a hyphen, and lists its blocks', async () => {
+  const a = await flowDocument();
+  assert.deepEqual(a.bytes, (await flowDocument()).bytes);
+  assert.equal((await PDFDocument.load(a.bytes)).getPageCount(), 2);
+  const lines = a.truth.pages[0].lines;
+  const broken = lines.findIndex((l) => /[a-z]-$/.test(l));
+  assert.ok(broken > 0, 'a word is broken at the end of a line');
+  assert.match(lines[broken + 1], /^[a-z]/, 'and goes on, lowercase, on the next');
+  assert.deepEqual(a.blocks.map((b) => b.kind), [
+    'heading', 'paragraph', 'paragraph', 'lines', 'heading', 'item', 'item', 'item', 'centred',
+    'heading', 'paragraph', 'paragraph', 'row', 'row', 'row',
+  ]);
+  assert.deepEqual(a.blocks.filter((b) => b.kind === 'heading').map((b) => [b.page, b.level]), [[1, 1], [1, 2], [2, 2]]);
+  assert.deepEqual(a.blocks[1].bold, ['the monthly rent of 950 dollars']);
+  assert.match(a.blocks[2].text, / the maintenance of /, 'the text has the word whole');
+  for (const b of a.blocks) assert.doesNotMatch(b.text, /[*~]/);
+  assert.equal(a.blocks[3].text, 'Sam Sample\nFlat 2, 100 Example Street\nRiverton XY 00000');
+  assert.equal(a.blocks.at(-1)?.text, 'Deposit\tAt signing\t1900');
+  const wrapped = a.blocks[1].text.split(' ').length;
+  assert.ok(lines.slice(1, 5).join(' ').split(' ').length === wrapped, 'the first paragraph is drawn over four lines, word for word');
 });

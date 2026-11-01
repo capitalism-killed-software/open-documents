@@ -274,6 +274,234 @@ export async function unlistedFontDocument() {
 }
 
 /**
+ * What flowDocument() holds, in reading order. `*` marks bold words and `~` the one place a word
+ * may be broken with a hyphen at the end of a line; the hyphen is the drawing's, not the text's.
+ * Paragraphs and list items wrap at the page's margins; `lines` blocks are drawn line for line.
+ */
+export const FLOW_DOCUMENT = {
+  pages: [
+    [
+      { kind: 'heading', level: 1, text: 'Tenancy Agreement' },
+      {
+        kind: 'paragraph',
+        text: 'This agreement is made between the landlord and the tenant named below, for the flat at the address given in the schedule. '
+          + 'The tenant agrees to pay *the monthly rent of 950 dollars* on the first day of each month, by bank transfer to the account the '
+          + 'landlord names in writing. The rent covers water and heating but not electricity, which the tenant pays to the supplier directly.',
+      },
+      {
+        kind: 'paragraph',
+        text: 'Either party may end this agreement by giving two months notice in writing. The landlord looks after the structural repairs, '
+          + 'the roof, the gutters, the outside walls, the windows and the main~tenance of the boiler, the wiring and the plumbing, and will '
+          + 'carry out urgent repairs within two working days of being told.',
+      },
+      { kind: 'lines', lines: ['Sam Sample', 'Flat 2, 100 Example Street', 'Riverton XY 00000'] },
+      { kind: 'heading', level: 2, text: 'Rules of the house' },
+      { kind: 'item', text: 'Keep the shared hallway and the stairs clear of bicycles and boxes.' },
+      { kind: 'item', text: 'Put rubbish out on Tuesday evenings, in the bins the council provides, and bring the bins back in by Wednesday night so the pavement stays clear.' },
+      { kind: 'item', text: "No pets without the landlord's written consent." },
+      { kind: 'centred', text: 'Both parties keep a signed copy of this agreement.' },
+    ],
+    [
+      { kind: 'heading', level: 2, text: 'Notes for the tenant' },
+      {
+        kind: 'columns',
+        columns: [
+          'Meters are read on the last working day of each quarter. Leave the cupboard under the stairs unlocked on that day, or arrange '
+            + 'another time with the landlord at least a week before.',
+          "Keys can be copied only with the landlord's consent. A lost key must be reported within a day, and the cost of changing the "
+            + 'locks is shared equally if no key is found.',
+        ],
+      },
+      { kind: 'rows', rows: [['Item', 'Due', 'Amount'], ['Rent', 'First of the month', '950'], ['Deposit', 'At signing', '1900']] },
+    ],
+  ],
+};
+
+/**
+ * A two-page tenancy agreement with the structure a flowing Word file must find again: headings,
+ * paragraphs that wrap over several lines (one with a bold phrase, one with a word broken by a
+ * hyphen), an address block of short stacked lines, a bullet list with an item that wraps, a
+ * centred line, two columns and a table with no rules. The words are wrapped here, by their
+ * widths, the way a word processor would, so every line break is known.
+ *
+ * @returns {Promise<Fixture & { blocks: { page: number, kind: string, level?: number, text: string, bold?: string[] }[] }>}
+ */
+export async function flowDocument() {
+  const doc = await PDFDocument.create();
+  setMetadata(doc, { ...DEFAULT_METADATA, title: 'Tenancy Agreement' });
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const [width, height] = PAGE_SIZES.letter;
+  const [left, right] = [72, width - 72];
+  /** @type {{ page: number, kind: string, level?: number, text: string, bold?: string[] }[]} */
+  const blocks = [];
+  /** @type {PageTruth[]} */
+  const truthPages = [];
+
+  /**
+   * Words with their fonts, from text marked with `*` for bold.
+   *
+   * @param {string} text
+   * @param {import('@cantoo/pdf-lib').PDFFont} plain
+   */
+  const wordsOf = (text, plain) => {
+    let strong = false;
+    return text.split(' ').map((raw) => {
+      const opens = raw.startsWith('*');
+      const closes = raw.endsWith('*');
+      if (opens) strong = true;
+      const word = { text: raw.replace(/\*/g, ''), font: strong ? bold : plain };
+      if (closes) strong = false;
+      return word;
+    });
+  };
+
+  /**
+   * Break words into lines no wider than `room`, splitting a word at `~` with a hyphen when its
+   * first part fits.
+   *
+   * @param {{ text: string, font: import('@cantoo/pdf-lib').PDFFont }[]} words
+   * @param {number} size
+   * @param {number} room
+   */
+  const wrap = (words, size, room) => {
+    const space = regular.widthOfTextAtSize(' ', size);
+    /** @type {{ text: string, font: import('@cantoo/pdf-lib').PDFFont }[][]} */
+    const lines = [[]];
+    let used = 0;
+    const queue = [...words];
+    while (queue.length) {
+      const word = /** @type {{ text: string, font: import('@cantoo/pdf-lib').PDFFont }} */ (queue.shift());
+      const line = /** @type {typeof words} */ (lines.at(-1));
+      const lead = line.length ? space : 0;
+      const w = word.font.widthOfTextAtSize(word.text.replace('~', ''), size);
+      if (used + lead + w <= room) {
+        line.push({ ...word, text: word.text.replace('~', '') });
+        used += lead + w;
+        continue;
+      }
+      const cut = word.text.indexOf('~');
+      if (cut > 0) {
+        const head = `${word.text.slice(0, cut)}-`;
+        if (used + lead + word.font.widthOfTextAtSize(head, size) <= room) {
+          line.push({ ...word, text: head });
+          queue.unshift({ ...word, text: word.text.slice(cut + 1) });
+          lines.push([]);
+          used = 0;
+          continue;
+        }
+      }
+      lines.push([{ ...word, text: word.text.replace('~', '') }]);
+      used = w;
+    }
+    return lines;
+  };
+
+  /**
+   * Draw one line of words from x, each change of font as its own run, with the space before it
+   * kept at the end of the run in front.
+   *
+   * @param {import('@cantoo/pdf-lib').PDFPage} page
+   * @param {{ text: string, font: import('@cantoo/pdf-lib').PDFFont }[]} words
+   * @param {number} x
+   * @param {number} y  baseline, from the bottom
+   * @param {number} size
+   */
+  const drawLine = (page, words, x, y, size) => {
+    /** @type {{ text: string, font: import('@cantoo/pdf-lib').PDFFont }[]} */
+    const runs = [];
+    words.forEach((word) => {
+      const last = runs.at(-1);
+      if (last && last.font === word.font) last.text += ` ${word.text}`;
+      else {
+        if (last) last.text += ' ';
+        runs.push({ ...word });
+      }
+    });
+    let at = x;
+    for (const run of runs) {
+      page.drawText(run.text, { x: at, y, size, font: run.font });
+      at += run.font.widthOfTextAtSize(run.text, size);
+    }
+    return words.map((w) => w.text).join(' ');
+  };
+
+  FLOW_DOCUMENT.pages.forEach((content, p) => {
+    const page = doc.addPage([width, height]);
+    /** @type {string[]} */
+    const drawn = [];
+    let y = height - 72;
+    for (const block of content) {
+      if (block.kind === 'heading') {
+        const size = block.level === 1 ? 20 : 14;
+        drawn.push(drawLine(page, wordsOf(/** @type {string} */ (block.text), bold), left, y, size));
+        blocks.push({ page: p + 1, kind: 'heading', level: block.level, text: /** @type {string} */ (block.text) });
+        y -= size * 1.8;
+      } else if (block.kind === 'paragraph' || block.kind === 'item') {
+        const item = block.kind === 'item';
+        const indent = item ? 14 : 0;
+        const words = wordsOf(/** @type {string} */ (block.text), regular);
+        const lines = wrap(words, 11, right - left - indent);
+        lines.forEach((line, i) => {
+          const text = drawLine(page, line, left + indent, y, 11);
+          if (item && i === 0) page.drawText('•', { x: left, y, size: 11, font: regular });
+          drawn.push(item && i === 0 ? `• ${text}` : text);
+          y -= 14;
+        });
+        const plain = /** @type {string} */ (block.text).replace(/[*~]/g, '');
+        const strong = [...(block.text ?? '').matchAll(/\*([^*]+)\*/g)].map((m) => m[1]);
+        blocks.push({ page: p + 1, kind: block.kind, text: item ? `• ${plain}` : plain, ...(strong.length ? { bold: strong } : {}) });
+        y -= item ? 2 : 12;
+      } else if (block.kind === 'lines') {
+        for (const line of block.lines ?? []) {
+          drawn.push(drawLine(page, wordsOf(line, regular), left, y, 11));
+          y -= 14;
+        }
+        blocks.push({ page: p + 1, kind: 'lines', text: (block.lines ?? []).join('\n') });
+        y -= 16;
+      } else if (block.kind === 'centred') {
+        const text = /** @type {string} */ (block.text);
+        const w = italic.widthOfTextAtSize(text, 11);
+        drawn.push(drawLine(page, wordsOf(text, italic), (width - w) / 2, y - 12, 11));
+        blocks.push({ page: p + 1, kind: 'centred', text });
+        y -= 40;
+      } else if (block.kind === 'columns') {
+        const gutter = 36;
+        const column = (right - left - gutter) / 2;
+        const wrapped = (block.columns ?? []).map((text) => wrap(wordsOf(text, regular), 10, column));
+        wrapped.forEach((lines, c) => {
+          lines.forEach((line, i) => drawn.push(drawLine(page, line, left + c * (column + gutter), y - i * 13, 10)));
+          blocks.push({ page: p + 1, kind: 'paragraph', text: (block.columns ?? [])[c] });
+        });
+        y -= Math.max(...wrapped.map((l) => l.length)) * 13 + 24;
+      } else if (block.kind === 'rows') {
+        (block.rows ?? []).forEach((cells, r) => {
+          cells.forEach((cell, c) => drawLine(page, wordsOf(cell, r === 0 ? bold : regular), left + c * 180, y, 11));
+          drawn.push(cells.join(' '));
+          blocks.push({ page: p + 1, kind: 'row', text: cells.join('\t') });
+          y -= 16;
+        });
+      }
+    }
+    truthPages.push({ width, height, rotation: 0, lines: drawn });
+  });
+
+  const bytes = await doc.save({ useObjectStreams: false });
+  return {
+    bytes,
+    blocks,
+    truth: {
+      metadata: { ...DEFAULT_METADATA, title: 'Tenancy Agreement' },
+      pages: truthPages,
+      bookmarks: [],
+      attachments: [],
+      encryption: null,
+    },
+  };
+}
+
+/**
  * A one-page form: a filled text field, a ticked check box, a dropdown and an empty field.
  *
  * @returns {Promise<Fixture & { fields: Record<string, string | boolean> }>}
