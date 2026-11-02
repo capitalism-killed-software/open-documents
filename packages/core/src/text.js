@@ -111,7 +111,8 @@ export function unrotate(pdf, page) {
  * decisions are kept, with one exception. Some generators (Chromium among them) write every
  * letter as its own text object, and PDFium then puts a line break between letters that sit on
  * one baseline. Such breaks are overruled: the letters join, or get a space when the gap
- * between them is wider than about a third of a letter.
+ * between them is wider than about a third of a letter. The other way round, PDFium joins a line
+ * that ends in a hyphen to the next; that line break is put back.
  *
  * @param {import('./engine/pdfium.js').Engine} pdf
  * @param {number} textPage
@@ -143,7 +144,11 @@ export function layout(pdf, textPage) {
   const read = (/** @type {number} */ offset, /** @type {'double' | 'float'} */ type) => pdf.wasm.getValue(ptr + offset, type);
   try {
     for (let i = 0; i < count; i++) {
-      const char = String.fromCodePoint(fn.FPDFText_GetUnicode(textPage, i));
+      // PDFium writes a hyphen that ends a line before a lowercase word as U+0002, and leaves out
+      // the line break after it, so the two lines would read as one. It is the page's hyphen.
+      const code = fn.FPDFText_GetUnicode(textPage, i);
+      const broken = code === 2;
+      const char = broken ? '-' : String.fromCodePoint(code);
       const generated = fn.FPDFText_IsGenerated(textPage, i) === 1;
       if (char === '\r' || char === '\n') {
         gap = generated ? (gap === 'hard' ? 'hard' : 'line') : 'hard';
@@ -188,7 +193,7 @@ export function layout(pdf, textPage) {
       }
       word.push(glyph);
       last = glyph;
-      gap = 'none';
+      gap = broken ? 'line' : 'none';
     }
     endLine();
     return lines;

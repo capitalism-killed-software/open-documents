@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unzipSync, strFromU8 } from 'fflate';
 import { PDFDocument, StandardFonts, rgb, TextRenderingMode, setTextRenderingMode, pushGraphicsState, popGraphicsState } from '@cantoo/pdf-lib';
-import { textDocument, pngImage, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT } from '@open-documents/fixtures';
+import { textDocument, pngImage, scaledDocument, SCALED_NOTICE, unlistedFontDocument, UNLISTED_FONT, flowDocument } from '@open-documents/fixtures';
 import { toDocx, toPptx, merge } from '../src/index.js';
 import { fontFace } from '../src/convert/layout.js';
 
@@ -74,6 +74,13 @@ test('words far apart on one line stay in separate boxes, where they were', asyn
   assert.ok(xml.includes('>Name</w:t>') && xml.includes('>Amount</w:t>'), 'not joined into one line of text');
   const boxes = (xml.match(/<wps:wsp>/g) ?? []).length;
   assert.equal(boxes, 5);
+});
+
+test('a line that ends in a hyphen keeps its own box, and the next line its own', async () => {
+  const agreement = await flowDocument();
+  const xml = files(await toDocx(agreement.bytes, { pages: [1] })).text('word/document.xml');
+  const texts = [...xml.matchAll(/<wps:txbx>(.*?)<\/wps:txbx>/g)].map((m) => [...m[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((t) => t[1]).join(''));
+  assert.deepEqual(texts, agreement.truth.pages[0].lines);
 });
 
 test('text drawn under a page-wide scale keeps the size it shows at', async () => {

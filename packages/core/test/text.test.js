@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument, splitLettersDocument } from '@open-documents/fixtures';
+import { textDocument, splitLettersDocument, flowDocument } from '@open-documents/fixtures';
 import { extractText, extractWords } from '../src/index.js';
 
 const doc = await textDocument({ pages: 3, rotation: [0, 90, 0] });
@@ -88,4 +88,19 @@ test('letters written one by one on a baseline still make a word', async () => {
   assert.equal(words.length, 1);
   assert.equal(words[0].text, 'Notes');
   assert.ok(Math.abs(words[0].x - 72) < 2 && words[0].width > 60, `spans the letters: ${JSON.stringify(words[0])}`);
+});
+
+test('a word broken over two lines with a hyphen stays on two lines, hyphen and all', async () => {
+  const agreement = await flowDocument();
+  const [page] = await extractText(agreement.bytes, { pages: [1] });
+  const lines = page.text.split('\n');
+  // PDFium marks such a hyphen with U+0002 and drops the line break after it
+  assert.ok(!page.text.includes('\u0002'));
+  assert.deepEqual(lines, agreement.truth.pages[0].lines);
+  const [{ words }] = await extractWords(agreement.bytes, { pages: [1] });
+  const head = words.find((w) => w.text === 'main-');
+  const tail = words.find((w) => w.text === 'tenance');
+  assert.ok(head && tail, 'the two halves are words of their own');
+  assert.ok(head.height < 15 && tail.height < 15, 'each box covers one line');
+  assert.ok(tail.y > head.y + 10 && tail.x < head.x, 'the second half starts the next line');
 });
