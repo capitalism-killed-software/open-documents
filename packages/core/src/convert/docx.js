@@ -1,9 +1,13 @@
-// PDF to Word, keeping the layout exactly: each page becomes a section the size of the page,
-// every stretch of text an unframed text box where it was, in its font, size and colour, and
-// everything else one picture behind the text. The text can be edited and searched; it does not
-// flow from line to line the way text typed into Word does.
+// PDF to Word. Two ways:
+// - "exact" (the default) keeps the layout: each page becomes a section the size of the page,
+//   every stretch of text an unframed text box where it was, in its font, size and colour, and
+//   everything else one picture behind the text. The text can be edited and searched; it does
+//   not flow from line to line the way text typed into Word does.
+// - "flow" writes ordinary paragraphs, headings and lists that reflow as you type (docx-flow.js).
 import { readLayout } from './layout.js';
+import { flowParts } from './docx-flow.js';
 import { xml, emu, placeBox, zipOffice, XML_HEAD } from './ooxml.js';
+import { fail } from '../errors.js';
 
 // How Word and LibreOffice set a line of exactly LINE times the font size: the baseline sits
 // about ASCENT times the size below the top. Measured by converting back to PDF and comparing.
@@ -25,18 +29,35 @@ const NS = {
 };
 
 /**
- * @typedef {import('./layout.js').LayoutOptions} DocxOptions
+ * @typedef {object} DocxModeOptions
+ * @property {'exact' | 'flow'} [mode]  "exact" (the default) keeps each page's layout with text
+ *   boxes over a picture; "flow" writes paragraphs, headings and lists that reflow as you type,
+ *   an editable draft rather than a copy of the look
+ * @property {boolean} [pageBreaks]  flow: start each PDF page on a new page; default true
  */
 
 /**
- * PDF to Word (.docx), keeping each page's layout: text boxes for the text, a picture for the
- * rest.
+ * @typedef {import('./layout.js').LayoutOptions & DocxModeOptions} DocxOptions
+ */
+
+/**
+ * PDF to Word (.docx): by default keeping each page's layout, with text boxes for the text and a
+ * picture for the rest; with `mode: 'flow'`, as flowing text to edit.
  *
  * @param {import('../input.js').DocumentInput} input
  * @param {DocxOptions} [options]
  * @returns {Promise<Uint8Array>}
  */
 export async function toDocx(input, options = {}) {
+  const mode = options.mode ?? 'exact';
+  if (mode !== 'exact' && mode !== 'flow') fail('INVALID_OPTION', 'mode must be "exact" or "flow".');
+  if (options.pageBreaks !== undefined && typeof options.pageBreaks !== 'boolean') fail('INVALID_OPTION', 'pageBreaks must be true or false.');
+  if (mode === 'flow') {
+    // no picture of the page: flowing text has nowhere to put one
+    const { title, author, pages } = await readLayout(input, { ...options, background: false });
+    const { document, styles } = flowParts(pages, { pageBreaks: options.pageBreaks ?? true });
+    return wordPackage({ title, author, document, styles, fonts: fontTable(pages), rels: [], media: {} });
+  }
   const { title, author, pages } = await readLayout(input, options);
   /** @type {Record<string, string | Uint8Array>} */
   const media = {};
@@ -62,6 +83,19 @@ export async function toDocx(input, options = {}) {
   });
 
   const document = `${XML_HEAD}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}" xmlns:wps="${NS.wps}" xmlns:mc="${NS.mc}"><w:body>${body.join('')}</w:body></w:document>`;
+  const styles = `${XML_HEAD}<w:styles xmlns:w="${NS.w}"><w:docDefaults>`
+    + '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault>'
+    + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:pPrDefault>'
+    + '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+  return wordPackage({ title, author, document, styles, fonts: fontTable(pages), rels, media });
+}
+
+/**
+ * The parts every Word file holds, around a document and its styles.
+ *
+ * @param {{ title: string, author: string, document: string, styles: string, fonts: string, rels: string[], media: Record<string, string | Uint8Array> }} parts
+ */
+function wordPackage({ title, author, document, styles, fonts, rels, media }) {
   return zipOffice({
     '[Content_Types].xml': `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`
       + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
@@ -79,11 +113,8 @@ export async function toDocx(input, options = {}) {
     'docProps/core.xml': `${XML_HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">`
       + `<dc:title>${xml(title)}</dc:title><dc:creator>${xml(author)}</dc:creator></cp:coreProperties>`,
     'word/document.xml': document,
-    'word/styles.xml': `${XML_HEAD}<w:styles xmlns:w="${NS.w}"><w:docDefaults>`
-      + '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault>'
-      + '<w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:pPrDefault>'
-      + '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>',
-    'word/fontTable.xml': fontTable(pages),
+    'word/styles.xml': styles,
+    'word/fontTable.xml': fonts,
     'word/_rels/document.xml.rels': `${XML_HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
       + '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
       + '<Relationship Id="rIdFonts" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>'

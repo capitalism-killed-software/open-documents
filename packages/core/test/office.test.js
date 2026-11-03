@@ -204,6 +204,94 @@ test('a font no one has keeps its name, and Word is told it is a sans', async ()
   assert.match(word.text('word/fontTable.xml'), new RegExp(`<w:font w:name="${UNLISTED_FONT}"><w:family w:val="swiss"/>`));
 });
 
+/**
+ * The paragraphs of a flowing Word file: their properties, and their text with tabs and line
+ * breaks.
+ *
+ * @param {string} xml
+ */
+function paragraphsOf(xml) {
+  return [...xml.matchAll(/<w:p>(.*?)<\/w:p>/g)].map(([, inner]) => {
+    const props = inner.match(/^<w:pPr>(.*?)<\/w:pPr>/)?.[1] ?? '';
+    const runs = inner.slice(props ? props.length + 15 : 0);
+    const text = [...runs.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>|<w:tab\/>|<w:br\/>/g)].map((m) => m[1] ?? (m[0] === '<w:tab/>' ? '\t' : '\n')).join('');
+    return { props, runs, text: text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&') };
+  });
+}
+
+test('flow: the agreement becomes paragraphs, headings and list items, with no text boxes', async () => {
+  const agreement = await flowDocument();
+  const { text } = files(await toDocx(agreement.bytes, { mode: 'flow' }));
+  const xml = text('word/document.xml');
+  assert.doesNotMatch(xml, /wps:txbx|<w:drawing>/);
+  const paragraphs = paragraphsOf(xml);
+  assert.deepEqual(paragraphs.map((p) => p.text), agreement.blocks.map((b) => (b.kind === 'item' ? b.text.replace('• ', '•\t') : b.text)));
+  const styleOf = (/** @type {{ props: string }} */ p) => p.props.match(/<w:pStyle w:val="(\w+)"\/>/)?.[1] ?? 'Normal';
+  assert.deepEqual(paragraphs.map(styleOf), agreement.blocks.map((b) => (b.kind === 'heading' ? `Heading${b.level}` : b.kind === 'item' ? 'ListParagraph' : 'Normal')));
+  const bold = [...paragraphs[1].runs.matchAll(/<w:r><w:rPr><w:b\/><w:bCs\/><\/w:rPr><w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1].trim());
+  assert.deepEqual(bold, agreement.blocks[1].bold, 'the bold phrase stays bold; the rest is plain Normal text');
+  assert.match(paragraphs[8].props, /<w:jc w:val="center"\/>/, 'the centred line stays centred');
+  assert.match(paragraphs[5].props, /<w:ind w:left="280" w:hanging="280"\/>/, 'list markers hang left of their text');
+  assert.match(paragraphs[9].props, /<w:pageBreakBefore\/>/, 'the second page starts a new page');
+  assert.equal(paragraphs.filter((p) => p.props.includes('pageBreakBefore')).length, 1);
+  assert.match(paragraphs[12].props, /<w:tabs><w:tab w:val="left" w:pos="3600"\/><w:tab w:val="left" w:pos="7200"\/><\/w:tabs>/, 'table cells line up on tab stops');
+  assert.doesNotMatch(paragraphs[11].props, /<w:ind/, 'the second column is not pushed to the right');
+  const styles = text('word/styles.xml');
+  assert.match(styles, /<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial"[^>]*\/><w:color w:val="000000"\/><w:sz w:val="22"\/>/, 'Normal is the body text');
+  assert.match(styles, /<w:name w:val="heading 1"\/>.*?<w:outlineLvl w:val="0"\/>.*?<w:sz w:val="40"\/>/, 'Heading 1 is the 20-point title');
+  assert.match(styles, /<w:name w:val="heading 2"\/>.*?<w:sz w:val="28"\/>/);
+  assert.match(styles, /<w:name w:val="List Paragraph"\/>/);
+  assert.match(text('word/fontTable.xml'), /<w:font w:name="Arial"><w:family w:val="swiss"\/>/);
+  assert.match(xml, /<w:sectPr><w:pgSz w:w="12240" w:h="15840"\/><w:pgMar w:top="1040" w:right="\d+" w:bottom="2160" w:left="1440"/);
+});
+
+test('flow: pages can run on without breaks; a change of page size starts a section', async () => {
+  const agreement = await flowDocument();
+  const joined = files(await toDocx(agreement.bytes, { mode: 'flow', pageBreaks: false })).text('word/document.xml');
+  assert.doesNotMatch(joined, /pageBreakBefore/);
+  const mixed = await merge([agreement.bytes, (await textDocument({ pages: 1, size: 'a4' })).bytes]);
+  const xml = files(await toDocx(mixed, { mode: 'flow' })).text('word/document.xml');
+  const sections = [...xml.matchAll(/<w:sectPr><w:pgSz w:w="(\d+)" w:h="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  assert.deepEqual(sections, [[12240, 15840], [11906, 16838]]);
+  assert.match(xml, /<w:sectPr>.*?<\/w:sectPr><\/w:pPr>/, 'the first section ends in its last paragraph');
+});
+
+test('flow: text drawn under a page-wide scale keeps its sizes', async () => {
+  const { bytes } = await scaledDocument();
+  const { text } = files(await toDocx(bytes, { mode: 'flow' }));
+  const paragraphs = paragraphsOf(text('word/document.xml'));
+  assert.equal(paragraphs[0].text, SCALED_NOTICE.lines[0].text);
+  assert.match(paragraphs[0].props, /Heading1/);
+  assert.match(text('word/styles.xml'), /<w:rPrDefault><w:rPr>.*?<w:sz w:val="20"\/>/, 'the body is 10 points');
+  assert.match(text('word/styles.xml'), /<w:name w:val="heading 1"\/>.*?<w:sz w:val="28"\/>/, 'the heading 14');
+  const address = paragraphs.find((p) => p.text.startsWith('Sam Sample'));
+  assert.equal(address?.text, SCALED_NOTICE.lines.slice(2, 5).map((l) => l.text).join('\n'));
+  assert.match(address?.runs ?? '', /<w:sz w:val="16"\/>/, 'the address 8');
+});
+
+test('flow: runs say only how they differ from the style of their paragraph', async () => {
+  const { text } = files(await toDocx(await styled(), { mode: 'flow' }));
+  const styles = text('word/styles.xml');
+  // most of the text on the page is the 10-point Courier, so that is the body
+  assert.match(styles, /<w:rPrDefault><w:rPr><w:rFonts w:ascii="Courier New"[^>]*\/><w:color w:val="000000"\/><w:sz w:val="20"\/>/);
+  assert.match(styles, /<w:name w:val="heading 1"\/>.*?<w:rPr><w:rFonts w:ascii="Arial"[^>]*\/><w:b\/><w:bCs\/><w:color w:val="ff0000"\/><w:sz w:val="36"\/>/);
+  const paragraphs = paragraphsOf(text('word/document.xml'));
+  assert.deepEqual(paragraphs.map((p) => p.text), ['Heading', 'A quote, set in italics', 'Name\tAmount', 'Fish & chips <large>']);
+  assert.equal(paragraphs[0].runs, '<w:r><w:t xml:space="preserve">Heading</w:t></w:r>', 'the heading style says it all');
+  assert.match(paragraphs[1].runs, /<w:rPr><w:rFonts w:ascii="Times New Roman"[^>]*\/><w:i\/><w:iCs\/><w:sz w:val="22"\/><w:szCs w:val="22"\/><\/w:rPr>/);
+  assert.match(text('word/document.xml'), />Fish &amp; chips &lt;large&gt;</);
+});
+
+test('flow: a PDF with no text says to run OCR first; bad options are refused', async () => {
+  const doc = await PDFDocument.create();
+  doc.addPage([300, 300]).drawRectangle({ x: 20, y: 20, width: 100, height: 50, color: rgb(0, 0, 0) });
+  await assert.rejects(toDocx(await doc.save(), { mode: 'flow' }), { code: 'CONVERSION_FAILED', message: /no text.*opendocs ocr/s });
+  const pdf = (await textDocument({ pages: 1 })).bytes;
+  await assert.rejects(toDocx(pdf, { mode: /** @type {any} */ ('loose') }), { code: 'INVALID_OPTION', message: /mode/ });
+  await assert.rejects(toDocx(pdf, { mode: 'flow', pageBreaks: /** @type {any} */ ('yes') }), { code: 'INVALID_OPTION', message: /pageBreaks/ });
+  assert.deepEqual(await toDocx(pdf, { mode: 'flow' }), await toDocx(pdf, { mode: 'flow' }), 'the same bytes every time');
+});
+
 test('bad options are refused', async () => {
   const doc = await textDocument({ pages: 1 });
   await assert.rejects(toDocx(doc.bytes, { background: /** @type {any} */ ('sometimes') }), { code: 'INVALID_OPTION' });

@@ -79,6 +79,7 @@ test('a short page of stacked lines is not taken for a full one', () => {
 test('a wider gap, another size or another left edge starts a new paragraph', () => {
   const gap = flow([seg(72, 100, FULL[0]), seg(72, 130, FULL[1])]);
   assert.equal(gap.pages[0].blocks.length, 2);
+  assert.equal(gap.pages[0].blocks[0].before, 0, 'nothing above the first');
   assert.ok(gap.pages[0].blocks[1].before > 10, 'with the space kept above it');
   const size = flow([seg(72, 100, FULL[0]), seg(72, 112, FULL[1], { size: 9 })]);
   assert.equal(size.pages[0].blocks.length, 2);
@@ -174,6 +175,7 @@ test('two columns are read one after the other; a table is not taken for columns
     seg(72, 160, FULL[0], { size: 10, width: 468 }),
   ]);
   assert.deepEqual(texts(columns), ['Notes for the tenant', left.join(' '), right.join(' '), FULL[0]]);
+  assert.deepEqual(columns.pages[0].blocks.map((b) => b.origin), [null, 72, 324, null], 'indents count from the column');
   // set on baselines that do not line up, so the lines of the two columns take turns
   const offset = flow([
     ...left.map((t, i) => seg(72, 90 + i * 13, t, { size: 10, width: 210 - (i === 2 ? 20 : 0) })),

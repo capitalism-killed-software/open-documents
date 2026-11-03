@@ -24,6 +24,8 @@
  *   item, where the text after the marker starts
  * @property {number} first   where its first line starts (an item's marker)
  * @property {number[]} tabs  for a row, where each cell after the first starts
+ * @property {number | null} origin  the left edge of the column it was set in, which its
+ *   indents count from; null when it was set across the page
  * @property {number} before  points of space above it
  * @property {number} size    its largest font size
  * @property {Piece[]} pieces
@@ -53,7 +55,7 @@
  * The part of a page a line belongs to: the whole page, or one column. `measure` is the right
  * edge a full line reaches.
  *
- * @typedef {{ left: number, right: number, measure: number }} Region
+ * @typedef {{ left: number, right: number, measure: number, column: boolean }} Region
  */
 
 /**
@@ -83,7 +85,7 @@ export function flowBlocks(pages) {
     const turned = segments.filter((s) => s.angle !== 0);
     const left = Math.min(...segments.map((s) => s.x));
     /** @type {Region} */
-    const edge = { left, right: page.width - left, measure: page.width - left };
+    const edge = { left, right: page.width - left, measure: page.width - left, column: false };
     const drafts = [
       ...draftsOf(order(flat, size, page.width, false)),
       ...turned.map((s) => /** @type {Draft} */ ({ kind: 'paragraph', region: edge, lines: [s], pieces: s.runs.map((r) => ({ ...r })), first: left, left })),
@@ -122,7 +124,8 @@ function finish(draft, body, levels, above) {
   const kind = heading ? 'heading' : draft.kind;
   const level = heading === 'big' ? Math.min(levels.indexOf(half(size)) + 1, 3) : heading ? Math.min(levels.length + 1, 3) : 0;
   const first = draft.lines[0];
-  const before = Math.min(36, Math.max(0, half(first.y - above - 1.2 * size)));
+  // the first block of a page has nothing above it to measure from
+  const before = above === -Infinity ? 0 : Math.min(36, Math.max(0, half(first.y - above - 1.2 * size)));
   const pieces = merge(draft.kind === 'item' ? markerTab(draft.pieces) : draft.pieces);
   return {
     kind,
@@ -131,7 +134,8 @@ function finish(draft, body, levels, above) {
     left: draft.kind === 'item' ? (draft.text ?? draft.first + 18) : draft.left,
     first: draft.first,
     tabs: draft.kind === 'row' ? draft.lines.slice(1).map((s) => s.x) : [],
-    before: Number.isFinite(before) ? before : 0,
+    origin: draft.region.column ? draft.region.left : null,
+    before,
     size,
     pieces,
   };
@@ -157,7 +161,7 @@ function order(segments, body, width, column) {
   // longest of them does not count as full
   const measure = !column && right - left < 0.5 * (width - 2 * left) ? width - left : right;
   /** @type {Region} */
-  const region = { left, right, measure };
+  const region = { left, right, measure, column };
   const bands = bandsOf(rowsOf(segments));
   /** @type {{ segments: Segment[], region: Region }[]} */
   const lines = [];
