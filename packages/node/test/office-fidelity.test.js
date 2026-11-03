@@ -2,8 +2,9 @@
 // back into a PDF, and see where every word landed. Needs LibreOffice; skipped without it.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { textDocument, docxDocument, scaledDocument, unlistedFontDocument } from '@open-documents/fixtures';
-import { toDocx, toPptx, extractWords, renderPage, inspect } from '@open-documents/core';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
+import { textDocument, docxDocument, scaledDocument, unlistedFontDocument, flowDocument } from '@open-documents/fixtures';
+import { toDocx, toPptx, extractWords, extractText, renderPage, inspect } from '@open-documents/core';
 import { createConverter, findLibreOffice } from '../src/index.js';
 
 const skip = (await findLibreOffice()) ? false : 'LibreOffice is not installed';
@@ -84,3 +85,46 @@ for (const [kind, convert] of /** @type {const} */ ([['docx', toDocx], ['pptx', 
     assert.deepEqual(fonts.filter((f) => /serif/i.test(f) && !/sans/i.test(f)), [], `drawn with ${fonts.join(', ')}`);
   });
 }
+
+/** @param {Uint8Array} pdf */
+async function wordsIn(pdf) {
+  return (await extractText(pdf)).flatMap((p) => p.text.split(/\s+/)).filter(Boolean);
+}
+
+test('docx flow: every word comes back, in the order it is read', { skip }, async () => {
+  const agreement = await flowDocument();
+  const back = await converter.toPdf(await toDocx(agreement.bytes, { mode: 'flow' }), { filename: 'flow.docx' });
+  assert.deepEqual(await wordsIn(back), agreement.blocks.flatMap((b) => b.text.split(/\s+/)));
+});
+
+test('docx flow: words typed into a paragraph wrap with it and push the rest down', { skip }, async () => {
+  const agreement = await flowDocument();
+  const docx = await toDocx(agreement.bytes, { mode: 'flow' });
+  const added = 'This sentence was typed into the Word file afterwards, to see the paragraph wrap around it like any other text would.';
+  const parts = unzipSync(docx);
+  const xml = strFromU8(parts['word/document.xml']);
+  assert.ok(xml.includes('given in the schedule. '));
+  parts['word/document.xml'] = strToU8(xml.replace('given in the schedule. ', `given in the schedule. ${added} `));
+  const [plain, typed] = await Promise.all([
+    converter.toPdf(docx, { filename: 'plain.docx' }),
+    converter.toPdf(zipSync(parts), { filename: 'typed.docx' }),
+  ]);
+  const expected = agreement.blocks.flatMap((b) => b.text.split(/\s+/));
+  const at = expected.indexOf('schedule.') + 1;
+  assert.deepEqual(await wordsIn(typed), [...expected.slice(0, at), ...added.split(' '), ...expected.slice(at)]);
+  /** @param {Uint8Array} pdf */
+  const firstPage = async (pdf) => (await extractWords(pdf, { pages: [1] }))[0].words;
+  const [before, after] = await Promise.all([firstPage(plain), firstPage(typed)]);
+  /** @param {typeof before} words @param {string} text */
+  const yOf = (words, text) => /** @type {{ y: number }} */ (words.find((w) => w.text === text)).y;
+  assert.ok(yOf(after, 'Either') - yOf(before, 'Either') > 10, 'the next paragraph moved down at least a line');
+  assert.equal(yOf(after, 'Tenancy'), yOf(before, 'Tenancy'), 'what is above stays put');
+  // no line was laid over another
+  for (const [i, a] of after.entries()) {
+    for (const b of after.slice(i + 1)) {
+      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      assert.ok(w <= 0.5 || h <= 0.5 * Math.min(a.height, b.height), `"${a.text}" and "${b.text}" overlap`);
+    }
+  }
+});
