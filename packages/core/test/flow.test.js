@@ -176,6 +176,8 @@ test('two columns are read one after the other; a table is not taken for columns
   ]);
   assert.deepEqual(texts(columns), ['Notes for the tenant', left.join(' '), right.join(' '), FULL[0]]);
   assert.deepEqual(columns.pages[0].blocks.map((b) => b.origin), [null, 72, 324, null], 'indents count from the column');
+  const [, first, second] = columns.pages[0].blocks;
+  assert.ok(first.before > 0 && second.before === first.before, 'the second column is spaced like the first, though it starts higher up');
   // set on baselines that do not line up, so the lines of the two columns take turns
   const offset = flow([
     ...left.map((t, i) => seg(72, 90 + i * 13, t, { size: 10, width: 210 - (i === 2 ? 20 : 0) })),

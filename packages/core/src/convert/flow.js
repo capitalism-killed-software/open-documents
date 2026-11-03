@@ -101,9 +101,16 @@ export function flowBlocks(pages) {
     body,
     pages: drafted.map(({ page, segments, drafts }) => {
       let above = -Infinity;
+      // the space above the last paragraph that had some
+      let gap = 0;
       const blocks = drafts.map((draft) => {
         const block = finish(draft, size, levels, above);
-        if (draft.lines[0].angle === 0) above = Math.max(above, /** @type {Segment} */ (draft.lines.at(-1)).y);
+        const top = draft.lines[0];
+        if (top.angle !== 0) return block;
+        // back up to the top of the next column: as much space as the paragraph before it had
+        if (top.y < above && !block.before) block.before = gap || half(size / 2);
+        if (block.kind !== 'heading' && block.before) gap = block.before;
+        above = Math.max(above, /** @type {Segment} */ (draft.lines.at(-1)).y);
         return block;
       });
       return { page: page.page, width: page.width, height: page.height, margins: marginsOf(segments, page), blocks };
